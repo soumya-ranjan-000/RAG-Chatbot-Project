@@ -1,0 +1,18 @@
+{
+  "Records": [
+    {
+      "s3": {
+        "object": {
+          "key": "boeing_conduct_guidelines.pdf"
+        }
+      }
+    },
+        {
+      "s3": {
+        "object": {
+          "key": "google_code_of_conduct.pdf"
+        }
+      }
+    }
+  ]
+}

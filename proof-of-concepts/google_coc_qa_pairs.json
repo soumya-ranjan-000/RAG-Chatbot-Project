@@ -1,0 +1,29 @@
+{
+  "qa_pairs": [
+    {
+      "id": 1,
+      "question": "What is Google's position on substance abuse and consumption of alcohol in the workplace?",
+      "answer": "Google's position on substance abuse is simple: it is incompatible with the health and safety of employees, and Google does not permit it. While consumption of alcohol is not banned at Google offices, employees must use good judgment and never drink in a way that leads to impaired performance or inappropriate behavior, endangers the safety of others, or violates the law. Illegal drugs in Google offices or at sponsored events are strictly prohibited. If a manager has reasonable suspicion that an employee's use of drugs and/or alcohol may adversely affect job performance or workplace safety, the manager may request an alcohol and/or drug screening."
+    },
+    {
+      "id": 2,
+      "question": "What are the prohibited activities under competition and antitrust laws that Google employees should avoid?",
+      "answer": "Under competition and antitrust laws, certain conduct is absolutely prohibited and could result in imprisonment and severe penalties. Prohibited conduct includes: agreeing with competitors about prices, agreeing with competitors to rig bids or allocate customers or markets, and agreeing with competitors to boycott a supplier or customer. Other illegal or improper activities include sharing competitively sensitive information such as prices, costs, and market distribution with competitors, entering into business arrangements with the sole purpose of harming a competitor, and using Google's size or strength to gain an unfair competitive advantage."
+    },
+    {
+      "id": 3,
+      "question": "What must employees do when disclosing confidential information to outside parties?",
+      "answer": "When a particular project or negotiation requires disclosure of Need to Know or Confidential information to an outside party, the disclosure should be on an 'only as needed' basis and only under a non-disclosure agreement. Additionally, Google policy may require a prior security assessment of the outside party that is to receive the confidential information. Employees must conduct appropriate due diligence and have the appropriate agreement in place before disclosing the information. Employees should not accept confidential information from other companies without first having all parties sign an appropriate Non-disclosure Agreement approved by Legal."
+    },
+    {
+      "id": 4,
+      "question": "What are the core requirements for signing a contract on behalf of Google?",
+      "answer": "Signing a contract on behalf of Google is a very significant responsibility. Employees can only sign a contract on behalf of Google if ALL of the following conditions are met: (1) They are authorized to do so under Google's Signature Authority and Approval Policy - if unsure, they should ask their manager; (2) The contract has been approved by the Legal Department - if using an approved Google form contract, further Legal approval is not needed unless changes have been made or it's used for a different purpose; (3) They have studied the contract, understood its terms, and decided that entering into the contract is in Google's interest. All contracts must be in writing and contain all relevant terms - Google does not permit 'side agreements,' oral or written."
+    },
+    {
+      "id": 5,
+      "question": "What restrictions apply to romantic and familial relationships between Google employees?",
+      "answer": "Romantic, physical, or familial relationships are not permitted between a Googler and another Googler or member of the extended workforce where one individual is in a position to exercise authority or supervision over the other. This prohibition includes any situation where one person is in the reporting line of the other, or where one person is a project or technical lead on a project on which the other person is working. Such relationships may compromise or appear to compromise an employee's ability to perform job responsibilities, may create uncomfortable or conflicted positions, and may raise issues of fairness, favoritism, or harassment. Employees should be mindful of how their relationships within Google could impact or be perceived by others."
+    }
+  ]
+}

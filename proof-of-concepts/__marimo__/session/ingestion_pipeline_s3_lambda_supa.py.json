@@ -1,0 +1,198 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.4",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "9b57d60968a480fcaf46674cf842e264",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">For a production-grade ingestion pipeline using AWS S3 and Supabase, the architecture generally flows like this:</span>\n<span class=\"paragraph\">Trigger: A new document is uploaded to your S3 bucket.</span>\n<span class=\"paragraph\">Compute: An AWS Lambda function (or an ECS container) is triggered by the S3 event.</span>\n<span class=\"paragraph\">Processing: The script downloads the file, extracts the text, normalizes it, and splits it into chunks.</span>\n<span class=\"paragraph\">Embedding: The chunks are sent to an embedding model (like OpenAI or HuggingFace).</span>\n<span class=\"paragraph\">Storage: The text chunks, metadata, and vector embeddings are saved to Supabase (using pgvector).</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "12fcaa31d478ccfb8478fb364cfc9291",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"step-1-prepare-supabase-postgresql-pgvector\">Step 1: Prepare Supabase (PostgreSQL + pgvector)</h2>\n<span class=\"paragraph\">Before we write the ingestion code, Supabase needs to be ready to store vector embeddings. Supabase uses the pgvector extension for this.</span>\n<ol>\n<li>Go to your Supabase dashboard and navigate to the SQL Editor.</li>\n<li>Run the following SQL to enable the vector extension and create your documents table. We will use 1536 dimensions, which is standard for OpenAI's text-embedding-3-small or text-embedding-ada-002.</li>\n</ol></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "fc01c55a3c2fab18dec84ea334157685",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "68f498e63bb62fa69f7bac0669d9a02c",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "4ec23a743e764ec1483f1366b58abaca",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "f35b0d93c5fcef9b027a7fd76e88d335",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"step-2-set-up-the-aws-s3-bucket\">Step 2: Set Up the AWS S3 Bucket</h2>\n<span class=\"paragraph\">You need a dedicated bucket for your raw documents.</span>\n<ol>\n<li>Go to the AWS S3 Console and create a new bucket (e.g., my-company-rag-docs-prod).</li>\n<li>Keep the bucket private. In a production RAG system, your policy documents and company data should never be publicly accessible.</li>\n<li>Note down the bucket name and ensure you have an IAM User/Role with s3:GetObject permissions so your Python code can read from it.</li>\n</ol></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "10008afd3f2affde078a04a3019275ca",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"step-3-the-core-python-ingestion-logic\">Step 3: The Core Python Ingestion Logic</h2>\n<span class=\"paragraph\">This script replaces your local folder reading with S3 streaming using boto3, chunks the text using LangChain, generates embeddings, and pushes everything to Supabase.</span>\n<span class=\"paragraph\">Prerequisites:</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "0b7b3e223cd6015e45cd410768bff9c3",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "173fffec8f8c0dd69060044c460c2d68",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "5583f89af2dba9d51c5a86ce07778059",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "3fe7ede44a63189ddc6898d174c174a7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "Authenticated as: arn:aws:iam::789303374640:root\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "548339e54d8b7c382eb3099394fdece4",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "7477aacc61ce6faf52e94cbd3f99edb6",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "1286cac27ba5eb233a1d06556abf97f9",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "1405e8abe47d30dbbeea0a0cee95aaca",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "14c5d223b4b4247cc2b0e36f3a9ac8a6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"retrieve-context-from-supabase-vector-similarity-search\">Retrieve context from Supabase - vector similarity search</h2>\n<span class=\"paragraph\">The most efficient way to do this is by calling a PostgreSQL function (stored procedure) via the Supabase client.</span>\n<h3 id=\"step-1-create-the-search-function-in-supabase\">Step 1: Create the Search Function in Supabase</h3>\n<span class=\"paragraph\">Run this SQL in your Supabase SQL Editor. This function calculates the distance between your query embedding and your stored chunks, returning the most relevant matches.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "028473d6f3ef7b1026e8b7b7fc54a0c1",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "e279fa15a4907788094a1eb52142e8e8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"step-2-python-retrieval-script\">Step 2: Python Retrieval Script</h3>\n<span class=\"paragraph\">This script takes a user's natural language query, converts it into a vector using your all-MiniLM-L6-v2 model, and fetches the top results from Supabase.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "a7a8c1deba37650941db59323b848844",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "eac4ff369fd3e4d640173929771f3745",
+      "outputs": [],
+      "console": []
+    }
+  ]
+}
