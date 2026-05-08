@@ -27,3 +27,4 @@ awscli
 langchain-community
 fastapi
 uvicorn
+python-dotenv
