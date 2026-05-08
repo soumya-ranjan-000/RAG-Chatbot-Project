@@ -68,6 +68,12 @@ app._unparsable_cell(
 )
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Need to update the vector dimension for SentenceTransformer
+    """)
+    return
 
 
 @app.cell
@@ -75,8 +81,64 @@ def _(mo):
     _df = mo.sql(
         f"""
         -- Run this in Supabase SQL Editor if you previously created a 1536-dim column
+        -- alter table document_chunks 
+        -- alter column embedding type vector(384);
+        """
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    all-MiniLM-L6-v2 which creates 384-dimension vectors. OpenAI’s 3-small creates 1536-dimension vectors. so if using openai, update the table
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    _df = mo.sql(
+        f"""
+        -- 1. Update the column to 1536 dimensions
         alter table document_chunks 
-        alter column embedding type vector(384);
+        alter column embedding type vector(1536);
+        """
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    _df = mo.sql(
+        f"""
+        -- 2. Update your search function to match
+        create or replace function match_documents (
+          query_embedding vector(1536),
+          match_threshold float,
+          match_count int
+        )
+        returns table (
+          id uuid,
+          chunk_content text,
+          metadata jsonb,
+          similarity float
+        )
+        language plpgsql
+        as $$
+        begin
+          return query
+          select
+            document_chunks.id,
+            document_chunks.chunk_content,
+            document_chunks.metadata,
+            1 - (document_chunks.embedding <=> query_embedding) as similarity
+          from document_chunks
+          where 1 - (document_chunks.embedding <=> query_embedding) > match_threshold
+          order by document_chunks.embedding <=> query_embedding
+          limit match_count;
+        end;
+        $$;
         """
     )
     return
@@ -129,14 +191,15 @@ def _():
     from langchain_community.document_loaders import PyPDFLoader
     import fitz
     from langchain_text_splitters import RecursiveCharacterTextSplitter
-    from sentence_transformers import SentenceTransformer
+    # from sentence_transformers import SentenceTransformer
+    from langchain_openai import OpenAIEmbeddings
     from langchain_core.documents import Document
 
     return (
         Client,
         Document,
+        OpenAIEmbeddings,
         RecursiveCharacterTextSplitter,
-        SentenceTransformer,
         boto3,
         create_client,
         datetime,
@@ -156,6 +219,13 @@ def _():
 
 
 @app.cell
+def _(os):
+    # Correct way
+    print(os.environ.get("OPENAI_API_KEY_TEMP"), len(os.environ.get("OPENAI_API_KEY_TEMP")))
+    return
+
+
+@app.cell
 def _(boto3):
     sts = boto3.client('sts')
     print(f"Authenticated as: {sts.get_caller_identity()['Arn']}")
@@ -163,7 +233,7 @@ def _(boto3):
 
 
 @app.cell
-def _(Client, SentenceTransformer, boto3, create_client, datetime, os, re):
+def _(Client, OpenAIEmbeddings, boto3, create_client, datetime, os, re):
     # ==========================================
     # ⚙️ CONFIGURATION & CLIENTS
     # ==========================================
@@ -177,7 +247,11 @@ def _(Client, SentenceTransformer, boto3, create_client, datetime, os, re):
     # --- REPLACED OpenAI WITH SentenceTransformer ---
     # Note: all-MiniLM-L6-v2 produces 384-dimensional vectors.
     # Ensure your Supabase column is set to vector(384) instead of vector(1536).
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+    # model = SentenceTransformer('all-MiniLM-L6-v2')
+    model = OpenAIEmbeddings(
+        model="text-embedding-3-small", 
+        openai_api_key=os.environ.get("OPENAI_API_KEY_TEMP")
+    )
 
     # ==========================================
     # 🧩 NORMALIZATION & ENRICHMENT
@@ -224,7 +298,7 @@ def _(Client, SentenceTransformer, boto3, create_client, datetime, os, re):
 @app.cell
 def _(Document, fitz, normalize_text):
     # extraction logics
-    def extract_pages_from_pdf(file_path: str) -> str:
+    def extract_pages_from_pdf(file_path: str) -> list:
         """
         Handles the heavy lifting of PDF layout analysis and text reconstruction.
         """
@@ -320,7 +394,8 @@ def _(
                 if not clean_content: continue
 
                 # Embedding
-                embedding_vector = model.encode(clean_content).tolist()
+                # embedding_vector = model.encode(clean_content).tolist()
+                embedding_vector = model.embed_query(clean_content)
 
                 # Get the starting page from metadata
                 start_page = chunk.metadata.get("page_number", 1)
@@ -362,8 +437,51 @@ def _(
 @app.cell
 def _(process_s3_document):
     if __name__ == "__main__":
-        process_s3_document("s3://amzn-souranj-rag-docs-prod-789303374640-us-east-1-an/google_code_of_conduct.pdf")
+        process_s3_document("s3://amzn-souranj-rag-docs-prod-789303374640-us-east-1-an/google_code_of_conduct_one_page.pdf")
         # pass
+    return
+
+
+@app.cell
+def _():
+    [
+      {
+        "id": "c238116b-b628-42f2-8ac8-5845de9d518b",
+        "document_name": "google_code_of_conduct_one_page.pdf",
+        "chunk_content": "Board & Governance https://abc.xyz/investor/google-code-of-conduct/ Google Code of Conduct The Google Code of Conduct is one of the ways we put Google’s values into practice. It’s built around the recognition that everything we do in connection with our work at Google will be, and should be, measured against the highest possible standards of ethical business conduct. We set the bar that high for practical as well as aspirational reasons: Our commitment to the highest standards helps us hire great people, build great products, and attract loyal users. Respect for our users, for the opportunity, and for each other are foundational to our success, and are something we need to support every day. So please do read the Code and Google’s values, and follow both in spirit and letter, always bearing in mind that each of us has a personal responsibility to incorporate, and to encourage other Googlers to incorporate, the principles of the Code and values into our work. And if you have a question",
+        "metadata": {
+          "tags": [
+            "Big Tech",
+            "Conduct"
+          ],
+          "source": "google_code_of_conduct_one_page.pdf",
+          "category": "Ethics",
+          "page_label": "Page 1",
+          "page_range": "1",
+          "chunk_index": 0,
+          "document_id": "35bf9f06",
+          "ingestion_date": "2026-05-09"
+        }
+      },
+      {
+        "id": "457d8f71-23df-4bae-acff-970ca0cf371a",
+        "document_name": "google_code_of_conduct_one_page.pdf",
+        "chunk_content": "to incorporate, and to encourage other Googlers to incorporate, the principles of the Code and values into our work. And if you have a question or ever think that one of your fellow Googlers or the company as a whole may be falling short of our commitment, don’t be silent. We want – and need – to hear from you. Who Must Follow Our Code? We expect all of our employees and Board members to know and follow the Code. Failure to do so can result in disciplinary action, including termination of employment. Moreover, while the Code is specifically written for Google employees and Board members, we expect members of our extended workforce (temps, vendors, and independent contractors) and others who",
+        "metadata": {
+          "tags": [
+            "Big Tech",
+            "Conduct"
+          ],
+          "source": "google_code_of_conduct_one_page.pdf",
+          "category": "Ethics",
+          "page_label": "Page 1",
+          "page_range": "1",
+          "chunk_index": 1,
+          "document_id": "35bf9f06",
+          "ingestion_date": "2026-05-09"
+        }
+      }
+    ]
     return
 
 
@@ -445,14 +563,14 @@ def _(model, supabase: "Client"):
         print(f"🔍 Searching for: {query}")
 
         # 2. Vectorize the User Query
-        query_embedding = model.encode(query).tolist()
+        query_embedding = model.embed_query(query)
 
         # 3. Call the Supabase 'match_documents' function
         response = supabase.rpc(
             'match_documents', 
             {
                 'query_embedding': query_embedding,
-                'match_threshold': 0.3, # Adjust based on how strict you want matches to be
+                'match_threshold': 0.5, # Adjust based on how strict you want matches to be
                 'match_count': count,
             }
         ).execute()
@@ -465,7 +583,7 @@ def _(model, supabase: "Client"):
 @app.cell
 def _(retrieve_context):
     if __name__ == "__main__":
-        user_query = "What are the prohibited activities under competition and antitrust laws that Google employees should avoid?"
+        user_query = "How does Google encourage employees to respond if they see a colleague or the company falling short of the Code?"
 
         results = retrieve_context(user_query)
 
@@ -479,6 +597,24 @@ def _(retrieve_context):
                 print("\n")
         else:
             print("❌ No relevant context found.")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Comprehension Questions
+
+    What is the primary purpose of the Google Code of Conduct?
+
+    Why does Google set the bar for ethical business conduct so high?
+
+    Which three groups are explicitly expected to follow the Code?
+
+    What are the potential consequences for employees who fail to follow the Code?
+
+    How does Google encourage employees to respond if they see a colleague or the company falling short of the Code?
+    """)
     return
 
 

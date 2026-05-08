@@ -4,7 +4,7 @@ import os
 import uuid
 import asyncio
 import json
-from ingestion import process_s3_document
+from app.ingestion import process_s3_document
 from typing import Dict, List, Callable
 
 app = FastAPI()

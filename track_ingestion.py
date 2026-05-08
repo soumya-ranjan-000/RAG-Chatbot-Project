@@ -24,7 +24,7 @@ response = requests.post(
             {
                 "s3": {
                     "object": {
-                        "key": "s3://amzn-souranj-rag-docs-prod-789303374640-us-east-1-an/google_code_of_conduct.pdf"
+                        "key": "s3://amzn-souranj-rag-docs-prod-789303374640-us-east-1-an/google_code_of_conduct_one_page.pdf"
                     }
                 }
             }
