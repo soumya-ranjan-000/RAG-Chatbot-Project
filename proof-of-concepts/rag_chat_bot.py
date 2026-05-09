@@ -167,7 +167,7 @@ def _(clear_button, inspector, mo, rag_chat_engine):
             mo.md("# 🤖 Policy AI"),
             clear_button 
         ], justify="space-between"),
-    
+
         mo.hstack([
             # Left Column: Chat
             mo.vstack([

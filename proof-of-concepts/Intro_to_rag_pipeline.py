@@ -3,9 +3,12 @@
 # dependencies = [
 #     "beautifulsoup4",
 #     "chromadb",
+#     "gdown==6.0.0",
+#     "ipython==9.13.0",
 #     "langchain-chroma",
 #     "langchain-text-splitters",
 #     "marimo>=0.23.4",
+#     "matplotlib==3.10.9",
 #     "numpy",
 #     "pillow",
 #     "plotly",
@@ -19,7 +22,7 @@
 
 import marimo
 
-__generated_with = "0.23.4"
+__generated_with = "0.23.5"
 app = marimo.App()
 
 
@@ -168,7 +171,6 @@ def _(mo):
 @app.cell
 def _():
     import re
-
 
     def normalize_text(text: str) -> str:
         # 1. Replace multiple newlines with a single space
@@ -366,23 +368,54 @@ def _(mo):
 
 
 @app.cell
-def _(COMPANY_POLICY_DIR, create_chunks, get_enriched_rag_document, os):
-    all_processed_chunks = []
-    global_id_counter = 0  
-    for file_name in os.listdir(COMPANY_POLICY_DIR):
-    # Loop through every file in your downloaded folder
-        print(f'Processing: {file_name}...')
-        doc_obj_1 = get_enriched_rag_document(file_name)
-        if 'Error' in doc_obj_1['content']:
-            print(f'Skipped {file_name} due to error.')  
-            continue
-        file_chunks = create_chunks(doc_obj_1)
-        for chunk in file_chunks:
-            chunk['chunk_id'] = global_id_counter
-            chunk['metadata']['chunk_index'] = global_id_counter  # Skip if there was an error reading
-            global_id_counter = global_id_counter + 1
-        all_processed_chunks.extend(file_chunks)
-    print(f'\n✅ Total chunks created: {len(all_processed_chunks)}')  # 2. Create chunks  # 3. Add to our master list
+def _(create_chunks, get_enriched_rag_document, os):
+    def process_policy_directory(directory_path):
+        """
+        Iterates through all files in a directory, extracts text, 
+        and returns a master list of all document chunks.
+        """
+        all_chunks = []
+        global_id_counter = 0
+    
+        # 1. Get list of files
+        file_list = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
+    
+        print(f"Found {len(file_list)} files in {directory_path}. Starting processing...")
+
+        for file_name in file_list:
+            print(f'Processing: {file_name}...')
+        
+            # 2. Extract and enrich document
+            doc_obj = get_enriched_rag_document(file_name)
+        
+            # Check for errors in the extraction process
+            if 'Error' in doc_obj.get('content', ''):
+                print(f'⚠️ Skipped {file_name} due to extraction error.')
+                continue
+            
+            # 3. Create chunks for this specific document
+            file_chunks = create_chunks(doc_obj)
+        
+            # 4. Assign global IDs and add to master list
+            for chunk in file_chunks:
+                chunk['chunk_id'] = global_id_counter
+                # Update metadata with the global index for tracking
+                chunk['metadata']['chunk_index'] = global_id_counter
+            
+                global_id_counter += 1
+                all_chunks.append(chunk)
+
+        print(f'\n✅ Successfully created {len(all_chunks)} total chunks.')
+        return all_chunks
+
+    # --- Usage ---
+    # all_processed_chunks = process_policy_directory(COMPANY_POLICY_DIR)
+    return (process_policy_directory,)
+
+
+@app.cell
+def _(COMPANY_POLICY_DIR, process_policy_directory):
+    all_processed_chunks = process_policy_directory(COMPANY_POLICY_DIR)
     return (all_processed_chunks,)
 
 
@@ -396,6 +429,7 @@ def _(mo):
 
 @app.cell
 def _(all_processed_chunks):
+    print(f"Size of all_processed_chunks: {len(all_processed_chunks)}")
     all_processed_chunks[0]
     return
 
@@ -411,7 +445,7 @@ def _(mo):
 @app.cell
 def _():
     import dotenv
-    dotenv.load_dotenv()
+    dotenv.load_dotenv(dotenv.find_dotenv())
     return
 
 
@@ -426,25 +460,48 @@ def _(mo):
 
 
 @app.cell
-def _(all_processed_chunks):
+def _():
     from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    # 1. Load the model (this will download it the first time)
-    chunk_texts = [chunk['content'] for chunk in all_processed_chunks]
-    print(f'Generating embeddings for {len(chunk_texts)} chunks... This may take a moment.')
-    # 2. Extract just the text content from your list of chunks
-    embeddings = model.encode(chunk_texts, show_progress_bar=True)
-    for i, chunk_1 in enumerate(all_processed_chunks):
-    # 3. Generate the embeddings (the actual math)
-        chunk_1['embedding'] = embeddings[i]
-    # 4. Attach the embeddings back to your chunk objects
-    print('\n✅ Embeddings generated and synced with chunk_ids!')
-    return SentenceTransformer, model
+
+    def generate_embeddings(chunks, model_name='all-MiniLM-L6-v2'):
+        """
+        Generates embeddings for a list of document chunks and 
+        attaches them to the chunk objects.
+        """
+        # 1. Initialize the model
+        model = SentenceTransformer(model_name)
+    
+        # 2. Extract text content for processing
+        texts = [chunk['content'] for chunk in chunks]
+    
+        print(f'Generating embeddings for {len(texts)} chunks using {model_name}...')
+    
+        # 3. Generate the embeddings
+        # Using show_progress_bar for better UX during long runs
+        embeddings = model.encode(texts, show_progress_bar=True)
+    
+        # 4. Map embeddings back to the original objects
+        for i, chunk in enumerate(chunks):
+            chunk['embedding'] = embeddings[i]
+        
+        print('✅ Embeddings generated and synced!')
+        return chunks
+
+    # --- Usage ---
+    # all_processed_chunks = generate_embeddings(all_processed_chunks)
+    return SentenceTransformer, generate_embeddings
 
 
 @app.cell
-def _(all_processed_chunks):
-    all_processed_chunks[134]
+def _(all_processed_chunks, generate_embeddings):
+    # This passes the list of dictionaries as expected
+    all_processed_chunks_temp = generate_embeddings(all_processed_chunks)
+    return (all_processed_chunks_temp,)
+
+
+@app.cell
+def _(all_processed_chunks_temp):
+    all_processed_chunks_temp[2]
     return
 
 
@@ -459,7 +516,7 @@ def _(mo):
 @app.cell
 def _(all_processed_chunks):
     # Check the embedding for the chunk you tested earlier (ID 310)
-    chunk_2 = all_processed_chunks[300]
+    chunk_2 = all_processed_chunks[2]
     sample_vector = chunk_2['embedding']
     print(f"Chunk ID: {chunk_2['chunk_id']}")
     print(f'Vector Dimensions: {len(sample_vector)}')
@@ -496,46 +553,61 @@ def _(mo):
 
 
 @app.cell
-def _(all_processed_chunks, os):
+def _(os):
     import chromadb
     from chromadb.config import Settings
 
-    PROJECT_ROOT = os.getcwd()
-    CHROMA_PATH = os.path.join(PROJECT_ROOT, "rag", "policy_vector_db")
-    print(f"Your database will be saved at: {CHROMA_PATH}")
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
-    collection = client.get_or_create_collection(
-        name="company_policies", metadata={"hnsw:space": "cosine"}
-    )
+    def push_to_vector_db(chunks, collection_name="company_policies", db_path=None):
+        """
+        Initializes ChromaDB and uploads document chunks in batches.
+        """
+        if db_path is None:
+            db_path = os.path.join(os.getcwd(), "rag", "policy_vector_db")
 
-    ids = [str(c["chunk_id"]) for c in all_processed_chunks]
-    embeddings_1 = [c["embedding"].tolist() for c in all_processed_chunks]
-    metadatas = [c["metadata"] for c in all_processed_chunks]
-    documents = [c["content"] for c in all_processed_chunks]
-    # 2. Initialize the Chroma Client
-    batch_size = 100
-    for i_1 in range(0, len(ids), batch_size):
-        # 3. Create (or get) a collection
-        # We use 'cosine' similarity because it works best with the MiniLM model
-        collection.add(
-            ids=ids[i_1 : i_1 + batch_size],
-            embeddings=embeddings_1[i_1 : i_1 + batch_size],
-            metadatas=metadatas[i_1 : i_1 + batch_size],
-            documents=documents[i_1 : i_1 + batch_size],
+        # 1. Initialize Persistent Client
+        client = chromadb.PersistentClient(path=db_path)
+    
+        # 2. Get or create the collection
+        # We use cosine similarity as it's standard for MiniLM models
+        collection = client.get_or_create_collection(
+            name=collection_name, 
+            metadata={"hnsw:space": "cosine"}
         )
-    # 4. Prepare data for batch upload
-    # Chroma expects lists of IDs, Embeddings, Metadata, and Documents
-    # 5. Push to ChromaDB
-    # We upload in batches to avoid memory issues
-    print(
-        f"✅ Successfully pushed {collection.count()} chunks to ChromaDB at {CHROMA_PATH}"
-    )  # Convert numpy to list
-    return chromadb, collection
+
+        # 3. Prepare data for upload
+        # Note: We ensure embeddings are converted from numpy arrays to lists
+        ids = [str(c["chunk_id"]) for c in chunks]
+        embeddings = [c["embedding"].tolist() if hasattr(c["embedding"], "tolist") else c["embedding"] for c in chunks]
+        metadatas = [c["metadata"] for c in chunks]
+        documents = [c["content"] for c in chunks]
+
+        # 4. Batched upload to prevent memory/timeout issues
+        batch_size = 100
+        for i in range(0, len(ids), batch_size):
+            collection.add(
+                ids=ids[i : i + batch_size],
+                embeddings=embeddings[i : i + batch_size],
+                metadatas=metadatas[i : i + batch_size],
+                documents=documents[i : i + batch_size]
+            )
+    
+        print(f"✅ Successfully pushed {collection.count()} chunks to {collection_name} at {db_path}")
+        return collection
+
+    # --- Usage ---
+    # collection = push_to_vector_db(all_processed_chunks)
+    return (push_to_vector_db,)
 
 
 @app.cell
-def _(all_processed_chunks):
-    len(all_processed_chunks)
+def _(all_processed_chunks_temp, push_to_vector_db):
+    collection = push_to_vector_db(all_processed_chunks_temp)
+    return (collection,)
+
+
+@app.cell
+def _(all_processed_chunks_temp):
+    len(all_processed_chunks_temp)
     return
 
 
@@ -551,25 +623,52 @@ def _(mo):
 
 
 @app.cell
-def _(collection, model):
-    # 1. Your query
-    query_text = "What is the policy regarding gifts and entertainment?"
-    query_embedding = model.encode(query_text).tolist()
-    # 2. Turn query into an embedding using your existing 'model'
-    results = collection.query(query_embeddings=[query_embedding], n_results=3)
-    for i_2 in range(len(results["documents"][0])):
-        # 3. Query the DB for the top 3 matches
-        print(
-            f"\n--- Result {i_2 + 1} (Source: {results['metadatas'][0][i_2]['source']}) ---"
+def _():
+    def retrieve_relevant_policies(query_text, collection, model_name='all-MiniLM-L6-v2', n_results=3):
+        """
+        Converts a query string into an embedding and retrieves 
+        the top N most relevant chunks from the vector database.
+        """
+        # 1. Initialize the same model used for ingestion
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(model_name)
+    
+        # 2. Generate embedding for the user query
+        # ChromaDB requires a list, so we convert the numpy array with .tolist()
+        query_embedding = model.encode(query_text).tolist()
+    
+        # 3. Query the collection
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results
         )
-        # 4. Display results
-        print(f"Content: {results['documents'][0][i_2][:200]}...")
-    return (results,)
+    
+        return results
+
+    def display_results(results):
+        """
+        Helper method to print the retrieval results cleanly.
+        """
+        for i in range(len(results["documents"][0])):
+            source = results['metadatas'][0][i]['source']
+            content = results['documents'][0][i]
+        
+            print(f"\n--- Result {i + 1} (Source: {source}) ---")
+            print(f"Content: {content[:300]}...") # Print first 300 chars
+
+    return display_results, retrieve_relevant_policies
 
 
 @app.cell
-def _(results):
-    results
+def _(collection, display_results, retrieve_relevant_policies):
+    # 1. Define your question
+    user_query = "What is the policy regarding gifts and entertainment?"
+
+    # 2. Use the new method
+    search_results = retrieve_relevant_policies(user_query, collection)
+
+    # 3. Display the findings
+    display_results(search_results)
     return
 
 
@@ -592,73 +691,58 @@ def _(mo):
 
 
 @app.cell
-def _(SentenceTransformer, chromadb, os):
+def _(SentenceTransformer):
+    import matplotlib.pyplot as plt
     import umap
     import numpy as np
-    import matplotlib.pyplot as plt
 
-    PROJECT_ROOT_1 = os.getcwd()
-    CHROMA_PATH_1 = os.path.join(PROJECT_ROOT_1, "rag", "policy_vector_db")
-    COLLECTION_NAME = "company_policies"
-    MODEL_NAME = "all-MiniLM-L6-v2"
-    model_1 = SentenceTransformer(MODEL_NAME)
-    client_1 = chromadb.PersistentClient(path=CHROMA_PATH_1)
-    collection_1 = client_1.get_collection(name=COLLECTION_NAME)
-    # 1. SETUP & RE-CONNECT
-    # CHROMA_PATH = "/content/drive/MyDrive/Projects/rag/policy_vector_db"
-    all_data = collection_1.get(include=["embeddings", "metadatas", "documents"])
-    all_embeddings = np.array(all_data["embeddings"])
-    all_ids = all_data["ids"]
-    print("Reducing dimensions for visualization...")
-    reducer = umap.UMAP(
-        n_neighbors=15, min_dist=0.1, metric="cosine", random_state=42
-    )
-    projections = reducer.fit_transform(all_embeddings)
-
-
-    # 2. FETCH DATA
-    def visualize_vector_search(query_text):
+    def query_and_visualize(query_text, collection, model_name='all-MiniLM-L6-v2', n_results=3):
         """
-            Takes a string query, searches the ChromaDB collection,
-            and draws a 2D map highlighting the results.
-        # 3. COMPUTE 2D (UMAP)
+        Retrieves relevant documents and visualizes them in 2D space.
         """
-        query_emb = model_1.encode(query_text).tolist()
-        results = collection_1.query(query_embeddings=[query_emb], n_results=5)
-        highlight_ids = results["ids"][0]
-        plt.figure(figsize=(12, 8), facecolor="#111111")
-        ax = plt.gca()
-        ax.set_facecolor("#111111")
-        is_highlight = np.array([tid in highlight_ids for tid in all_ids])
-        plt.scatter(
-            projections[~is_highlight, 0],
-            projections[~is_highlight, 1],
-            c="gray",
-            alpha=0.2,
-            s=30,
-            label="Library Chunks",
+        # 1. Initialize Model (Fixes NameError)
+        model = SentenceTransformer(model_name)
+    
+        # 2. Retrieve results
+        query_embedding = model.encode(query_text).tolist()
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results
         )
-        plt.scatter(
-            projections[is_highlight, 0],
-            projections[is_highlight, 1],
-            c="red",
-            alpha=1.0,
-            s=180,
-            edgecolors="white",
-            linewidth=1.5,
-            label="Search Results",
-        )  # 1. Embed the user query
-        plt.title(
-            f"Vector Space Highlights: '{query_text}'",
-            color="white",
-            fontsize=14,
-            pad=20,
-        )
-        plt.legend(facecolor="#222222", labelcolor="white", loc="upper right")
-        plt.axis("off")  # 2. Search the collection for the top 5 matches
-        plt.show()  # 3. Create the Plot  # Identify which points to highlight  # Draw background galaxy (Gray)  # Draw search results (Red)
+    
+        # 3. Get all data for visualization
+        all_data = collection.get(include=['embeddings', 'documents', 'metadatas'])
+        all_embeddings = np.array(all_data['embeddings'])
+    
+        # 4. Fix UMAP Warning: Adjust n_neighbors based on dataset size
+        n_samples = all_embeddings.shape[0]
+        n_neighbors = min(n_samples - 1, 15) if n_samples > 1 else 1
+    
+        if n_samples > 2:
+            reducer = umap.UMAP(n_neighbors=n_neighbors, random_state=42)
+            projections = reducer.fit_transform(all_embeddings)
+        
+            # Plotting logic
+            plt.figure(figsize=(10, 6))
+            plt.scatter(projections[:, 0], projections[:, 1], c='gray', alpha=0.5, label='Library Chunks')
+        
+            # Highlight matches
+            match_ids = results['ids'][0]
+            for i, doc_id in enumerate(all_data['ids']):
+                if doc_id in match_ids:
+                    plt.scatter(projections[i, 0], projections[i, 1], c='red', s=100, edgecolors='black')
+        
+            plt.title(f"Vector Space Highlights: '{query_text}'")
+            plt.legend()
+            plt.show()
+        else:
+            print("Point cloud visualization skipped: Need at least 3 chunks in DB.")
 
-    return (visualize_vector_search,)
+        return results
+
+    # --- Usage ---
+    # results = query_and_visualize("What is the gift policy?", collection)
+    return (query_and_visualize,)
 
 
 @app.cell(hide_code=True)
@@ -670,32 +754,32 @@ def _(mo):
 
 
 @app.cell
-def _(visualize_vector_search):
-    visualize_vector_search("What is the policy regarding gifts and entertainment?")
+def _(collection, query_and_visualize):
+    query_and_visualize("What is the policy regarding gifts and entertainment?",collection)
     return
 
 
 @app.cell
-def _(visualize_vector_search):
-    visualize_vector_search("How should employees handle harassment or workplace discrimination?")
+def _(collection, query_and_visualize):
+    query_and_visualize("How should employees handle harassment or workplace discrimination?",collection)
     return
 
 
 @app.cell
-def _(visualize_vector_search):
-    visualize_vector_search("What is the protocol for reporting a cybersecurity data breach?")
+def _(collection, query_and_visualize):
+    query_and_visualize("What is the protocol for reporting a cybersecurity data breach?",collection)
     return
 
 
 @app.cell
-def _(visualize_vector_search):
-    visualize_vector_search("What is the process for requesting a reasonable accommodation for a disability?")
+def _(collection, query_and_visualize):
+    query_and_visualize("What is the process for requesting a reasonable accommodation for a disability?",collection)
     return
 
 
 @app.cell
-def _(visualize_vector_search):
-    visualize_vector_search("Tell me about the general responsibilities of a manager.")
+def _(collection, query_and_visualize):
+    query_and_visualize("Tell me about the general responsibilities of a manager.",collection)
     return
 
 

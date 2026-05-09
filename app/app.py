@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, Request, HTTPException
+from fastapi import FastAPI, BackgroundTasks, Request, HTTPException, File, UploadFile, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import os
@@ -6,8 +6,9 @@ import uuid
 import asyncio
 import json
 import logging
-from .ingestion import process_s3_document
-from typing import Dict, List, Callable, Optional
+from .ingestion import process_s3_document, upload_file_to_s3
+from .retrieval import search_vector_chunks
+from typing import Dict, List, Callable, Optional, Union
 
 # Setup logging
 logging.basicConfig(
@@ -36,6 +37,40 @@ class S3Record(BaseModel):
 class S3Event(BaseModel):
     Records: List[S3Record]
 
+class EventBridgeBucket(BaseModel):
+    name: str
+
+class EventBridgeObject(BaseModel):
+    key: str
+    size: Optional[int] = None
+    etag: Optional[str] = None
+    sequencer: Optional[str] = None
+
+class EventBridgeDetail(BaseModel):
+    version: Optional[str] = None
+    bucket: EventBridgeBucket
+    object: EventBridgeObject
+    request_id: Optional[str] = Field(None, alias="request-id")
+    requester: Optional[str] = None
+    source_ip_address: Optional[str] = Field(None, alias="source-ip-address")
+    reason: Optional[str] = None
+
+class EventBridgeEvent(BaseModel):
+    version: str
+    id: str
+    detail_type: str = Field(..., alias="detail-type")
+    source: str
+    account: str
+    time: str
+    region: str
+    resources: List[str]
+    detail: EventBridgeDetail
+
+    class Config:
+        populate_by_name = True
+
+from typing import Union
+
 # In-memory job tracking
 job_progress: Dict[str, Dict] = {}
 
@@ -52,32 +87,70 @@ def create_progress_callback(job_id: str) -> Callable:
     return update_progress
 
 
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file directly to the S3 bucket."""
+    logger.info(f"Received /upload request for file: {file.filename}")
+    
+    try:
+        content = await file.read()
+        s3_uri = upload_file_to_s3(content, file.filename)
+        
+        return {
+            "message": "File uploaded successfully",
+            "filename": file.filename,
+            "s3_uri": s3_uri,
+            "content_type": file.content_type
+        }
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/query")
+async def query_documents(
+    text: str = Query(..., description="The search query text"),
+    top_k: int = Query(5, description="Number of relevant chunks to return"),
+    threshold: float = Query(0.5, description="Similarity threshold (0.0 to 1.0)")
+):
+    """Search for relevant document chunks based on semantic similarity."""
+    logger.info(f"Received /query request: '{text}' (top_k={top_k})")
+    
+    try:
+        results = search_vector_chunks(text, top_k=top_k, threshold=threshold)
+        return {
+            "query": text,
+            "results_count": len(results),
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Query failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
 @app.post("/ingest")
-async def s3_webhook(request: Request, background_tasks: BackgroundTasks):
+async def s3_webhook(
+    payload: Union[EventBridgeEvent, S3Event], 
+    background_tasks: BackgroundTasks
+):
     """Ingest documents and return a job ID for tracking progress."""
     
-    # 1. Get raw JSON since the structure might vary
-    try:
-        payload = await request.json()
-        logger.info(f"Received /ingest request. Payload: {json.dumps(payload)}")
-    except Exception:
-        logger.error("Failed to parse JSON payload in /ingest")
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    # 2. Extract Records based on the source (Direct S3 vs EventBridge)
+    # payload is now automatically parsed and validated as either S3Event or EventBridgeEvent
+    logger.info(f"Received /ingest request. Type: {type(payload).__name__}")
+    
+    # 2. Normalize the data into a records list
     records = []
     
-    if "Records" in payload:
+    if isinstance(payload, S3Event):
         # Standard S3 Event
-        records = payload["Records"]
+        records = [r.model_dump() for r in payload.Records]
         logger.info(f"Found {len(records)} records in standard S3 event format")
-    elif "detail" in payload:
+    elif isinstance(payload, EventBridgeEvent):
         # EventBridge wrapper
-        detail = payload["detail"]
         records = [{
             "s3": {
-                "bucket": { "name": detail.get("bucket", {}).get("name") },
-                "object": { "key": detail.get("object", {}).get("key") }
+                "bucket": { "name": payload.detail.bucket.name },
+                "object": { "key": payload.detail.object.key }
             }
         }]
         logger.info(f"Found 1 record in EventBridge format: {records[0]['s3']['object']['key']}")
@@ -115,7 +188,9 @@ async def process_ingestion(job_id: str, records: List[dict]):
 
         for idx, record in enumerate(records):
             s3_key = record["s3"]["object"]["key"]
-            logger.info(f"[{job_id}] Processing file {idx+1}/{len(records)}: {s3_key}")
+            bucket_name = record["s3"].get("bucket", {}).get("name")
+            
+            logger.info(f"[{job_id}] Processing file {idx+1}/{len(records)}: {s3_key} in bucket {bucket_name}")
 
             # Update progress
             job_progress[job_id]["current_file"] = s3_key
@@ -125,7 +200,7 @@ async def process_ingestion(job_id: str, records: List[dict]):
             callback = create_progress_callback(job_id)
 
             # Process the document with progress tracking
-            process_s3_document(s3_key, progress_callback=callback)
+            process_s3_document(s3_key, bucket_name=bucket_name, progress_callback=callback)
 
         job_progress[job_id]["status"] = "completed"
         job_progress[job_id]["message"] = "Ingestion completed successfully"

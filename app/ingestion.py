@@ -36,6 +36,24 @@ SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 s3_client = boto3.client("s3")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+def upload_file_to_s3(file_content: bytes, file_name: str, bucket_name: str = None):
+    """Upload raw bytes to S3 and return the S3 URI."""
+    target_bucket = bucket_name or S3_BUCKET
+    logger.info(f"Uploading {file_name} to {target_bucket}...")
+    
+    try:
+        s3_client.put_object(
+            Bucket=target_bucket,
+            Key=file_name,
+            Body=file_content
+        )
+        s3_uri = f"s3://{target_bucket}/{file_name}"
+        logger.info(f"Successfully uploaded to {s3_uri}")
+        return s3_uri
+    except Exception as e:
+        logger.error(f"Failed to upload {file_name} to S3: {e}", exc_info=True)
+        raise e
+
 # --- REPLACED OpenAI WITH SentenceTransformer ---
 # Note: all-MiniLM-L6-v2 produces 384-dimensional vectors.
 # Ensure your Supabase column is set to vector(384) instead of vector(1536).
@@ -123,7 +141,7 @@ def extract_pages_from_pdf(file_path: str) -> list:
 # ==========================================
 
 
-def process_s3_document(s3_key: str, progress_callback=None):
+def process_s3_document(s3_key: str, bucket_name: str = None, progress_callback=None):
     # Helper for optional progress reporting.
     def report(stage: str, details: dict = None):
         if progress_callback is not None:
@@ -134,7 +152,10 @@ def process_s3_document(s3_key: str, progress_callback=None):
         parts = s3_key.replace("s3://", "").split("/", 1)
         s3_key = parts[1]
 
-    logger.info(f"--- Starting Ingestion Pipeline for: {s3_key} ---")
+    # Use provided bucket or fallback to default
+    target_bucket = bucket_name or S3_BUCKET
+
+    logger.info(f"--- Starting Ingestion Pipeline for: {s3_key} in bucket {target_bucket} ---")
     report("Starting ingestion", {"current_file": s3_key})
     
     document_id = str(uuid.uuid4())[:8]
@@ -147,9 +168,9 @@ def process_s3_document(s3_key: str, progress_callback=None):
 
     try:
         # 3. Download
-        logger.info(f"Downloading {s3_key} from bucket {S3_BUCKET}")
+        logger.info(f"Downloading {s3_key} from bucket {target_bucket}")
         report("Downloading file", {"current_file": s3_key})
-        s3_client.download_file(S3_BUCKET, s3_key, temp_file_path)
+        s3_client.download_file(target_bucket, s3_key, temp_file_path)
         logger.info(f"Download complete: {temp_file_path}")
 
         # 4. Load & Process

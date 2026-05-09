@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.23.4"
-app = marimo.App()
+app = marimo.App(width="full")
 
 
 @app.cell
@@ -42,15 +42,15 @@ def _(CHROMA_PATH):
         model = SentenceTransformer(MODEL_NAME)
         client = chromadb.PersistentClient(path=CHROMA_PATH)
         collection = client.get_collection(name=COLLECTION_NAME)
-    
+
         # Fetch all vectors
         all_data = collection.get(include=["embeddings", "metadatas", "documents"])
         embeddings = np.array(all_data['embeddings'])
-    
+
         # Compute 2D Projections (UMAP)
         reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, metric='cosine', random_state=42)
         projections = reducer.fit_transform(embeddings)
-    
+
         return model, collection, projections, all_data
 
     # Initialize
@@ -101,13 +101,13 @@ def _(
     def get_explorer_view():
         highlight_ids = []
         search_results_data = []
-    
+
         # 1. Run Search Logic
         if search_button.value and search_input.value:
             query_emb = model.encode(search_input.value).tolist()
             results = collection.query(query_embeddings=[query_emb], n_results=5)
             highlight_ids = results['ids'][0]
-        
+
             # Prepare data for the table
             for i in range(len(results['ids'][0])):
                 search_results_data.append({
@@ -120,7 +120,7 @@ def _(
         # 2. Build the Plot
         colors = ['#ff4b4b' if tid in highlight_ids else 'rgba(100, 150, 250, 0.3)' for tid in data['ids']]
         sizes = [15 if tid in highlight_ids else 7 for tid in data['ids']]
-    
+
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=projections[:, 0], 
@@ -156,48 +156,6 @@ def _(
         ])
 
     get_explorer_view()
-    return
-
-
-@app.cell
-def _():
-    import sqlalchemy
-
-    DATABASE_URL = f"mysql+pymysql://SOUMYA_MOTOBOOK\SAMBA:MYSQL_PASSWORD@localhost\SQLEXPRESS:3306/SQL Tutorial"
-    engine = sqlalchemy.create_engine(DATABASE_URL)
-    return
-
-
-@app.cell
-def _(mo):
-    _df = mo.sql(
-        f"""
-        -- Create the table
-        CREATE TABLE students (
-            id INTEGER,
-            name VARCHAR,
-            major VARCHAR,
-            gpa DOUBLE
-        );
-
-        -- Insert some sample values
-        INSERT INTO students VALUES 
-            (1, 'Alice', 'Computer Science', 3.8),
-            (2, 'Bob', 'Data Science', 3.5),
-            (3, 'Charlie', 'Physics', 3.9),
-            (4, 'Diana', 'Mathematics', 3.7);
-        """
-    )
-    return
-
-
-@app.cell
-def _(mo, students):
-    _df = mo.sql(
-        f"""
-        SELECT * FROM students;
-        """
-    )
     return
 
 
