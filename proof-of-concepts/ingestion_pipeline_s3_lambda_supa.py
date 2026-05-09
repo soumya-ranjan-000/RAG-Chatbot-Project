@@ -108,7 +108,7 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(mo):
     _df = mo.sql(
         f"""
@@ -614,6 +614,24 @@ def _(mo):
     What are the potential consequences for employees who fail to follow the Code?
 
     How does Google encourage employees to respond if they see a colleague or the company falling short of the Code?
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Pre-Deployment: Wrapp the ingestion logic in FastAPI
+
+    Also define the payload structure to mirror an S3 event, the final step is ensuring the POST endpoint correctly parses that specific JSON structure and triggers your processing logic.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # Deployement - Render
     """)
     return
 
