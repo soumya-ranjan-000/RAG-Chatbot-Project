@@ -1,12 +1,20 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import os
 import uuid
 import asyncio
 import json
+import logging
 from .ingestion import process_s3_document
 from typing import Dict, List, Callable, Optional
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("rag-app")
 
 app = FastAPI()
 
@@ -45,13 +53,43 @@ def create_progress_callback(job_id: str) -> Callable:
 
 
 @app.post("/ingest")
-async def s3_webhook(payload: S3Event, background_tasks: BackgroundTasks):
+async def s3_webhook(request: Request, background_tasks: BackgroundTasks):
     """Ingest documents and return a job ID for tracking progress."""
+    
+    # 1. Get raw JSON since the structure might vary
+    try:
+        payload = await request.json()
+        logger.info(f"Received /ingest request. Payload: {json.dumps(payload)}")
+    except Exception:
+        logger.error("Failed to parse JSON payload in /ingest")
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    # 2. Extract Records based on the source (Direct S3 vs EventBridge)
+    records = []
+    
+    if "Records" in payload:
+        # Standard S3 Event
+        records = payload["Records"]
+        logger.info(f"Found {len(records)} records in standard S3 event format")
+    elif "detail" in payload:
+        # EventBridge wrapper
+        detail = payload["detail"]
+        records = [{
+            "s3": {
+                "bucket": { "name": detail.get("bucket", {}).get("name") },
+                "object": { "key": detail.get("object", {}).get("key") }
+            }
+        }]
+        logger.info(f"Found 1 record in EventBridge format: {records[0]['s3']['object']['key']}")
+    
+    if not records:
+        logger.warning("No S3 records found in payload. Ignoring request.")
+        return {"status": "ignored", "message": "No S3 records found in payload"}
+
+    # 3. Logic
     job_id = str(uuid.uuid4())
-    records = payload.Records
-
-    # Initialize job progress
+    logger.info(f"Created Job ID: {job_id}")
+    
     job_progress[job_id] = {
         "status": "pending",
         "total_files": len(records),
@@ -61,20 +99,23 @@ async def s3_webhook(payload: S3Event, background_tasks: BackgroundTasks):
         "errors": [],
     }
 
-    # Process files in background
-    # Convert Pydantic models back to dicts for the background task logic
-    background_tasks.add_task(process_ingestion, job_id, [r.model_dump() for r in records])
+    # Pass the records (already dicts) to your background task
+    background_tasks.add_task(process_ingestion, job_id, records)
 
-    return {"job_id": job_id, "status": "processing", "files": len(records)}
+    response = {"job_id": job_id, "status": "processing", "files": len(records)}
+    logger.info(f"Returning response for {job_id}: {response}")
+    return response
 
 
 async def process_ingestion(job_id: str, records: List[dict]):
     """Process ingestion and update progress."""
+    logger.info(f"Background task started for Job: {job_id}")
     try:
         job_progress[job_id]["status"] = "in_progress"
 
         for idx, record in enumerate(records):
             s3_key = record["s3"]["object"]["key"]
+            logger.info(f"[{job_id}] Processing file {idx+1}/{len(records)}: {s3_key}")
 
             # Update progress
             job_progress[job_id]["current_file"] = s3_key
@@ -88,8 +129,10 @@ async def process_ingestion(job_id: str, records: List[dict]):
 
         job_progress[job_id]["status"] = "completed"
         job_progress[job_id]["message"] = "Ingestion completed successfully"
+        logger.info(f"Background task COMPLETED for Job: {job_id}")
 
     except Exception as e:
+        logger.error(f"Background task FAILED for Job: {job_id}. Error: {str(e)}", exc_info=True)
         job_progress[job_id]["status"] = "failed"
         job_progress[job_id]["message"] = f"Error: {str(e)}"
         job_progress[job_id]["errors"].append(str(e))
@@ -98,9 +141,14 @@ async def process_ingestion(job_id: str, records: List[dict]):
 @app.get("/ingest/progress/{job_id}")
 async def get_progress(job_id: str):
     """Get current progress of an ingestion job."""
+    logger.info(f"Progress check requested for Job: {job_id}")
     if job_id not in job_progress:
+        logger.warning(f"Job not found: {job_id}")
         return {"error": "Job not found"}
-    return job_progress[job_id]
+    
+    current_status = job_progress[job_id]
+    logger.info(f"Job {job_id} status: {current_status['status']} ({current_status['processed_files']}/{current_status['total_files']})")
+    return current_status
 
 
 @app.get("/ingest/stream/{job_id}")

@@ -3,6 +3,7 @@ import boto3
 import tempfile
 import uuid
 import re
+import logging
 from datetime import datetime
 import numpy as np
 from supabase import create_client, Client
@@ -15,9 +16,15 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 
+# Setup logging
+logger = logging.getLogger("rag-ingestion")
+
 load_dotenv()
 sts = boto3.client("sts")
-print(f"Authenticated as: {sts.get_caller_identity()['Arn']}")
+try:
+    print(f"Authenticated as: {sts.get_caller_identity()['Arn']}")
+except Exception as e:
+    print(f"⚠️ AWS Credentials not found or invalid: {e}")
 
 # ==========================================
 # ⚙️ CONFIGURATION & CLIENTS
@@ -88,6 +95,7 @@ def extract_pages_from_pdf(file_path: str) -> list:
     """
     Handles the heavy lifting of PDF layout analysis and text reconstruction.
     """
+    logger.info(f"Extracting pages from PDF: {file_path}")
     try:
         doc = fitz.open(file_path)
         pages = []
@@ -103,9 +111,10 @@ def extract_pages_from_pdf(file_path: str) -> list:
                         },  # Humans prefer 1-based indexing
                     )
                 )
+        logger.info(f"Successfully extracted {len(pages)} pages")
         return pages
     except Exception as e:
-        print(f"❌ Extraction error: {e}")
+        logger.error(f"Extraction error for {file_path}: {e}", exc_info=True)
         return []
 
 
@@ -125,8 +134,9 @@ def process_s3_document(s3_key: str, progress_callback=None):
         parts = s3_key.replace("s3://", "").split("/", 1)
         s3_key = parts[1]
 
+    logger.info(f"--- Starting Ingestion Pipeline for: {s3_key} ---")
     report("Starting ingestion", {"current_file": s3_key})
-    print(f"📥 Starting ingestion for: {s3_key}")
+    
     document_id = str(uuid.uuid4())[:8]
     ext = os.path.splitext(s3_key)[-1].lower()
 
@@ -137,59 +147,64 @@ def process_s3_document(s3_key: str, progress_callback=None):
 
     try:
         # 3. Download
+        logger.info(f"Downloading {s3_key} from bucket {S3_BUCKET}")
         report("Downloading file", {"current_file": s3_key})
-        print(f"Downloading {s3_key}...")
         s3_client.download_file(S3_BUCKET, s3_key, temp_file_path)
+        logger.info(f"Download complete: {temp_file_path}")
 
-        # 4. Load & Process (Combined into one block)
+        # 4. Load & Process
+        documents = []
+        clean_text = False
+
         if ext == ".pdf":
             report("Extracting PDF pages", {"current_file": s3_key})
             documents = extract_pages_from_pdf(temp_file_path)
-            clean_text = True
+            clean_text = len(documents) > 0
         elif ext == ".txt":
             report("Loading text file", {"current_file": s3_key})
+            logger.info(f"Reading text file: {s3_key}")
             with open(temp_file_path, "r", encoding="utf-8") as f:
-                clean_text = normalize_text(f.read())
-                # Wrap in a LangChain Document so your existing chunker still works
+                raw_text = f.read()
+                clean_content = normalize_text(raw_text)
+                clean_text = len(clean_content) > 0
                 documents = [
-                    Document(page_content=clean_text, metadata={"source": s3_key})
+                    Document(page_content=clean_content, metadata={"source": s3_key})
                 ]
+            logger.info(f"Text file loaded and normalized")
         else:
+            logger.warning(f"Unsupported file type: {ext}")
             report("Unsupported file type", {"current_file": s3_key})
-            print(f"Unsupported extension: {ext}")
             return
 
         if not clean_text:
+            logger.warning(f"No text content extracted from {s3_key}")
             report("No text extracted", {"current_file": s3_key})
-            print("⚠️ No text extracted. Skipping.")
             return
 
         # 5. Chunking
+        logger.info(f"Splitting document into chunks...")
         report("Chunking document", {"current_file": s3_key})
-        print(f"Chunking {s3_key}...")
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000, chunk_overlap=150, separators=["\n\n", "\n", " ", ""]
         )
         chunks = text_splitter.split_documents(documents)
+        logger.info(f"Created {len(chunks)} chunks")
 
         report("Converting to vectors", {"current_file": s3_key})
-        print(f"Converting to vector...")
         records_to_insert = []
+        
+        logger.info(f"Generating embeddings for {len(chunks)} chunks...")
         for i, chunk in enumerate(chunks):
-            clean_content = chunk.page_content  # Already normalized above
+            clean_content = chunk.page_content
             if not clean_content:
                 continue
 
             # Embedding
-            # embedding_vector = model.encode(clean_content).tolist()
             embedding_vector = model.embed_query(clean_content)
 
-            # Get the starting page from metadata
             start_page = chunk.metadata.get("page_number", 1)
-
             page_display = str(start_page)
 
-            # Metadata
             metadata = get_enriched_chunk_metadata(
                 s3_key, clean_content, i, page_display, document_id
             )
@@ -204,18 +219,22 @@ def process_s3_document(s3_key: str, progress_callback=None):
             )
 
         # 6. Supabase Upload
+        logger.info(f"Uploading {len(records_to_insert)} vectors to Supabase...")
         report("Uploading to Supabase", {"current_file": s3_key})
-        print(f"Uploading to Supabase {s3_key}...")
+        
         if records_to_insert:
-            for i in range(0, len(records_to_insert), 50):
-                batch = records_to_insert[i : i + 50]
+            batch_size = 50
+            for i in range(0, len(records_to_insert), batch_size):
+                batch = records_to_insert[i : i + batch_size]
                 supabase.table("document_chunks").insert(batch).execute()
+                logger.info(f"Uploaded batch {i//batch_size + 1}")
+            
             report("Upload complete", {"current_file": s3_key})
-            print(f"✅ Ingested {len(records_to_insert)} chunks for {s3_key}")
+            logger.info(f"✅ SUCCESSFULLY INGESTED: {s3_key}")
 
     except Exception as e:
+        logger.error(f"Error processing {s3_key}: {str(e)}", exc_info=True)
         report("Error during processing", {"current_file": s3_key, "errors": [str(e)]})
-        print(f"❌ Error during processing: {str(e)}")
     finally:
         # 7. Single Cleanup at the very end
         if os.path.exists(temp_file_path):
