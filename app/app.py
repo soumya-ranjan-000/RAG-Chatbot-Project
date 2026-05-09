@@ -1,13 +1,32 @@
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 import os
 import uuid
 import asyncio
 import json
 from .ingestion import process_s3_document
-from typing import Dict, List, Callable
+from typing import Dict, List, Callable, Optional
 
 app = FastAPI()
+
+# --- Request Models ---
+
+class S3Object(BaseModel):
+    key: str
+
+class S3Bucket(BaseModel):
+    name: Optional[str] = None
+
+class S3Data(BaseModel):
+    bucket: Optional[S3Bucket] = None
+    object: S3Object
+
+class S3Record(BaseModel):
+    s3: S3Data
+
+class S3Event(BaseModel):
+    Records: List[S3Record]
 
 # In-memory job tracking
 job_progress: Dict[str, Dict] = {}
@@ -26,11 +45,11 @@ def create_progress_callback(job_id: str) -> Callable:
 
 
 @app.post("/ingest")
-async def s3_webhook(payload: dict, background_tasks: BackgroundTasks):
+async def s3_webhook(payload: S3Event, background_tasks: BackgroundTasks):
     """Ingest documents and return a job ID for tracking progress."""
 
     job_id = str(uuid.uuid4())
-    records = payload.get("Records", [])
+    records = payload.Records
 
     # Initialize job progress
     job_progress[job_id] = {
@@ -43,7 +62,8 @@ async def s3_webhook(payload: dict, background_tasks: BackgroundTasks):
     }
 
     # Process files in background
-    background_tasks.add_task(process_ingestion, job_id, records)
+    # Convert Pydantic models back to dicts for the background task logic
+    background_tasks.add_task(process_ingestion, job_id, [r.model_dump() for r in records])
 
     return {"job_id": job_id, "status": "processing", "files": len(records)}
 
