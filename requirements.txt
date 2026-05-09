@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+boto3
+supabase
+pymupdf
+langchain-text-splitters
+langchain-openai
+langchain-community
+numpy
+python-dotenv

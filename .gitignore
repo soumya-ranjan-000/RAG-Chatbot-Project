@@ -56,3 +56,4 @@ Thumbs.db
 # Project specific
 *.log
 .ipynb_checkpoints/
+__marimo__/

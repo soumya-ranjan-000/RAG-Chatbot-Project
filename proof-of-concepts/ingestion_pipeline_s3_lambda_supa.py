@@ -631,8 +631,149 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Deployement - Render
+    1. Update your FastAPI Endpoint
+    Ensure your main.py (or equivalent) is set up to drill down into that nested dictionary to extract the key.
     """)
+    return
+
+
+@app.cell
+def _(IndexErrors, process_s3_document):
+    from fastapi import FastAPI, BackgroundTasks
+    from pydantic import BaseModel
+    from typing import List
+
+    app = FastAPI()
+
+    # This matches the structure you provided
+    class S3Object(BaseModel):
+        key: str
+
+    class S3Record(BaseModel):
+        s3: dict # Contains the 'object' with the 'key'
+
+    class S3Payload(BaseModel):
+        Records: List[dict]
+
+    @app.post("/ingest")
+    async def trigger_ingestion(payload: S3Payload, background_tasks: BackgroundTasks):
+        # Extract the key from your specific JSON structure
+        try:
+            s3_key = payload.Records[0]['s3']['object']['key']
+        
+            # Use BackgroundTasks so the HTTP request returns 202 immediately 
+            # while the heavy processing happens in the background.
+            background_tasks.add_task(process_s3_document, s3_key)
+        
+            return {"status": "accepted", "file": s3_key}
+        except (KeyError, IndexErrors):
+            return {"status": "error", "message": "Invalid payload structure"}
+
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    2. Configuration on Render
+    To deploy this successfully, make sure your Start Command in the Render Dashboard reflects the web server:
+
+    - Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+    - (Note: main is your filename, app is your FastAPI instance name).
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    # After Deployement - Render
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Connecting S3 to Render
+
+    Option A: AWS EventBridge (The "Clean" Way)
+    1. Go to Amazon EventBridge in the AWS Console.
+
+    2. Create a Pipe or an API Destination.
+
+    3. Set the Source to your S3 Bucket (Object Created).
+
+    4. Set the Target to your Render URL: https://your-service.onrender.com/ingest.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Option B: Simple Lambda Proxy
+
+    If you want to keep it simple, a 5-line AWS Lambda function triggered by S3 can simply forward the event to Render:
+    """)
+    return
+
+
+@app.cell
+def _():
+    import requests
+
+    def lambda_handler(event, context):
+        # Forwards the exact payload you provided to Render
+        requests.post("https://your-service.onrender.com/ingest", json=event)
+        return {"statusCode": 200}
+
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    EventBridge API Destinations Setup
+
+    1. Enable EventBridge on your S3 Bucket:
+
+    - Go to your S3 Bucket Properties.
+
+    - Scroll down to Event notifications -> Amazon EventBridge.
+
+    - Click Edit and set it to On.
+
+    2. Create a Connection (Auth):
+
+    - Go to the EventBridge Console -> API destinations -> Connections.
+
+    - Click Create connection. Name it Render-FastAPI-Connection.
+
+    - Destination type: Other. Authorization type: None (unless you added a secret header to your FastAPI).
+
+    3. Create the API Destination:
+
+    - Go to API destinations -> Create API destination.
+
+    - API destination endpoint: https://your-render-app.onrender.com/ingest
+
+    - HTTP method: POST.
+
+    4. Create the Rule:
+
+    - Go to Rules -> Create rule.
+
+    - Event pattern: Choose AWS services, S3, and Object Created.
+
+    - Target: Select API destination and choose the one you just created.
+    """)
+    return
+
+
+@app.cell
+def _():
     return
 
 
