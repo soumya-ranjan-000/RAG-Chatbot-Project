@@ -1,0 +1,109 @@
+import axios from "axios";
+import type {
+  UploadResponse,
+  QueryResponse,
+  IngestionRequest,
+  IngestionResponse,
+  JobProgress,
+} from "../types/api";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+const client = axios.create({
+  baseURL: API_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// Add response error handling
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error("API Error:", error.response?.data || error.message);
+    throw error;
+  }
+);
+
+export const apiService = {
+  /**
+   * Upload a file to S3
+   */
+  async uploadFile(file: File): Promise<UploadResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await client.post<UploadResponse>("/upload", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    return response.data;
+  },
+
+  /**
+   * Query documents using semantic search
+   */
+  async queryDocuments(
+    text: string,
+    topK: number = 5,
+    threshold: number = 0.5
+  ): Promise<QueryResponse> {
+    const response = await client.get<QueryResponse>("/query", {
+      params: {
+        text,
+        top_k: topK,
+        threshold,
+      },
+    });
+
+    return response.data;
+  },
+
+  /**
+   * Trigger ingestion pipeline
+   */
+  async triggerIngestion(request: IngestionRequest): Promise<IngestionResponse> {
+    const response = await client.post<IngestionResponse>("/ingest", request);
+    return response.data;
+  },
+
+  /**
+   * Get ingestion job progress
+   */
+  async getIngestionProgress(jobId: string): Promise<JobProgress> {
+    const response = await client.get<JobProgress>(`/ingest/progress/${jobId}`);
+    return response.data;
+  },
+
+  /**
+   * Stream ingestion progress using Server-Sent Events
+   */
+  streamIngestionProgress(
+    jobId: string,
+    onMessage: (progress: JobProgress) => void,
+    onError: (error: Error) => void
+  ): EventSource {
+    const url = `${API_URL}/ingest/stream/${jobId}`;
+    const eventSource = new EventSource(url);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const progress = JSON.parse(event.data);
+        onMessage(progress);
+      } catch (error) {
+        onError(new Error("Failed to parse progress message"));
+      }
+    };
+
+    eventSource.onerror = () => {
+      onError(new Error("SSE connection error"));
+      eventSource.close();
+    };
+
+    return eventSource;
+  },
+};
+
+export default apiService;

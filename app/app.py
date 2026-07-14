@@ -1,4 +1,5 @@
 from fastapi import FastAPI, BackgroundTasks, Request, HTTPException, File, UploadFile, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import os
@@ -6,8 +7,8 @@ import uuid
 import asyncio
 import json
 import logging
-from .ingestion import process_s3_document, upload_file_to_s3
-from .retrieval import search_vector_chunks
+from ingestion import process_s3_document, upload_file_to_s3
+from retrieval import search_vector_chunks
 from typing import Dict, List, Callable, Optional, Union
 
 # Setup logging
@@ -18,6 +19,24 @@ logging.basicConfig(
 logger = logging.getLogger("rag-app")
 
 app = FastAPI()
+
+# --- CORS Configuration ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "*",                          # Allow all origins for development
+        "http://localhost:5173",      # Vite dev server
+        "http://localhost:3000",      # Backend itself
+        "http://127.0.0.1:5173",      # Localhost alternative
+        "http://127.0.0.1:3000",      # Localhost alternative
+        "https://localhost:5173",     # HTTPS versions
+        "https://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    max_age=3600,
+)
 
 # --- Request Models ---
 

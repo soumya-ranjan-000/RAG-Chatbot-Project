@@ -1,5 +1,5 @@
 import logging
-from .ingestion import supabase, model
+from ingestion import supabase, model
 
 logger = logging.getLogger("rag-retrieval")
 
