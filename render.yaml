@@ -1,0 +1,30 @@
+services:
+  # Backend API Service
+  - type: web
+    name: rag-chatbot-backend
+    runtime: python
+    pythonVersion: 3.13
+    rootDir: ./app
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13
+    plan: standard
+    region: oregon
+
+  # Frontend Service (Static Site with Node.js)
+  - type: web
+    name: rag-chatbot-frontend
+    runtime: node
+    rootDir: ./frontend
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: rag-chatbot-backend
+          property: url
+        scope: build
+    plan: standard
+    region: oregon
