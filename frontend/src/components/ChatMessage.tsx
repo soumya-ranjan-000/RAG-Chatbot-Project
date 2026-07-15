@@ -835,103 +835,111 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                   li: ({ children }) => <li style={{ marginBottom: "4px" }}>{children}</li>,
                   code: ({ inline, className, children, ...props }: any) => {
                     const match = /language-(\w+)/.exec(className || "");
-                    const lang = match ? match[1] : "";
+                    let lang = match ? match[1] : "";
                     const content = String(children).replace(/\n$/, "");
 
-                    if (!inline && lang === "flights") {
+                    if (!inline) {
+                      let parsedData: any = null;
+                      let isJson = false;
                       try {
-                        const flightsData = JSON.parse(content);
-                        return (
-                          <FlightsCardList 
-                            flights={flightsData} 
-                            onSelect={(flightNumber, date) => onSendMessage?.(`I want to book flight ${flightNumber} on ${date}`)} 
-                          />
-                        );
+                        parsedData = JSON.parse(content);
+                        isJson = true;
                       } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
+                        // Not valid JSON
                       }
-                    }
-                    if (!inline && lang === "tickets") {
-                      try {
-                        const bookingsData = JSON.parse(content);
-                        return <TicketsCardList bookings={bookingsData} onSendMessage={onSendMessage} />;
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
+
+                      if (isJson && parsedData !== null) {
+                        // Auto-detect schema if language is "json" or not specified
+                        if (lang === "json" || lang === "") {
+                          if (Array.isArray(parsedData)) {
+                            if (parsedData.length > 0) {
+                              const first = parsedData[0];
+                              if (first.flight_number && (first.origin || first.destination)) {
+                                lang = "flights";
+                              } else if (first.pnr && first.passenger_name) {
+                                lang = "tickets";
+                              } else if (first.code && first.label) {
+                                lang = "meal-options";
+                              } else if (first.label && first.text) {
+                                lang = "options";
+                              }
+                            }
+                          } else {
+                            if (parsedData.pnr && (parsedData.flight_id || parsedData.flight_number) && parsedData.passenger_id) {
+                              lang = "seats-options";
+                            } else if (parsedData.pnr && (parsedData.price !== undefined || parsedData.amount !== undefined) && parsedData.flight_number) {
+                              lang = "payment";
+                            } else if (parsedData.name && parsedData.email) {
+                              lang = "passenger-review";
+                            } else if (parsedData.question && parsedData.yes_text && parsedData.no_text) {
+                              lang = "confirm";
+                            }
+                          }
+                        }
+
+                        // Render appropriate custom card component
+                        if (lang === "flights" && Array.isArray(parsedData)) {
+                          return (
+                            <FlightsCardList 
+                              flights={parsedData} 
+                              onSelect={(flightNumber, date) => onSendMessage?.(`I want to book flight ${flightNumber} on ${date}`)} 
+                            />
+                          );
+                        }
+                        if (lang === "tickets" && Array.isArray(parsedData)) {
+                          return <TicketsCardList bookings={parsedData} onSendMessage={onSendMessage} />;
+                        }
+                        if (lang === "payment") {
+                          return <PaymentLinkCard payment={parsedData} />;
+                        }
+                        if (lang === "passenger-review") {
+                          return (
+                            <PassengerReviewCard 
+                              data={parsedData} 
+                              onConfirm={() => onSendMessage?.(`I confirm my passenger details: Name: ${parsedData.name}, Email: ${parsedData.email}. Please proceed.`)}
+                            />
+                          );
+                        }
+                        if (lang === "seats-options") {
+                          if (parsedData.flight_number && !parsedData.flight_id) {
+                            parsedData.flight_id = parsedData.flight_number;
+                          }
+                          return (
+                            <SeatsOptionsCard 
+                              seats={parsedData} 
+                              onSelect={(seat) => onSendMessage?.(`I want to choose seat ${seat}`)}
+                            />
+                          );
+                        }
+                        if (lang === "meal-options" && Array.isArray(parsedData)) {
+                          return (
+                            <MealOptionsCard 
+                              meals={parsedData} 
+                              onSelect={(code) => onSendMessage?.(`I select meal option ${code}`)}
+                            />
+                          );
+                        }
+                        if (lang === "options" && Array.isArray(parsedData)) {
+                          return (
+                            <OptionsCard 
+                              options={parsedData} 
+                              onSelect={(text) => onSendMessage?.(text)}
+                            />
+                          );
+                        }
+                        if (lang === "confirm") {
+                          return (
+                            <ConfirmCard 
+                              data={parsedData} 
+                              onSelect={(text) => onSendMessage?.(text)}
+                            />
+                          );
+                        }
                       }
+
+                      return <pre className={className} {...props}><code>{children}</code></pre>;
                     }
-                    if (!inline && lang === "payment") {
-                      try {
-                        const paymentData = JSON.parse(content);
-                        return <PaymentLinkCard payment={paymentData} />;
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
-                      }
-                    }
-                    if (!inline && lang === "passenger-review") {
-                      try {
-                        const data = JSON.parse(content);
-                        return (
-                          <PassengerReviewCard 
-                            data={data} 
-                            onConfirm={() => onSendMessage?.(`I confirm my passenger details: Name: ${data.name}, Email: ${data.email}. Please proceed.`)}
-                          />
-                        );
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
-                      }
-                    }
-                    if (!inline && lang === "seats-options") {
-                      try {
-                        const seatsData = JSON.parse(content);
-                        return (
-                          <SeatsOptionsCard 
-                            seats={seatsData} 
-                            onSelect={(seat) => onSendMessage?.(`I want to choose seat ${seat}`)}
-                          />
-                        );
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
-                      }
-                    }
-                    if (!inline && lang === "meal-options") {
-                      try {
-                        const mealsData = JSON.parse(content);
-                        return (
-                          <MealOptionsCard 
-                            meals={mealsData} 
-                            onSelect={(code) => onSendMessage?.(`I select meal option ${code}`)}
-                          />
-                        );
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
-                      }
-                    }
-                    if (!inline && lang === "options") {
-                      try {
-                        const optionsData = JSON.parse(content);
-                        return (
-                          <OptionsCard 
-                            options={optionsData} 
-                            onSelect={(text) => onSendMessage?.(text)}
-                          />
-                        );
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
-                      }
-                    }
-                    if (!inline && lang === "confirm") {
-                      try {
-                        const confirmData = JSON.parse(content);
-                        return (
-                          <ConfirmCard 
-                            data={confirmData} 
-                            onSelect={(text) => onSendMessage?.(text)}
-                          />
-                        );
-                      } catch (e) {
-                        return <pre className={className} {...props}><code>{children}</code></pre>;
-                      }
-                    }
+
                     return <code className={className} {...props}>{children}</code>;
                   }
                 }}
