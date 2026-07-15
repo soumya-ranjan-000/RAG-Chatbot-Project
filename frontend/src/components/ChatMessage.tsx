@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Avatar, Typography, Button, Tag, Tooltip, Modal } from "antd";
+import { Avatar, Typography, Button, Tag, Tooltip, Modal, Slider, Input, message } from "antd";
 import { UserOutlined, RobotOutlined, FileTextOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage as MessageType, ChunkSource } from "../types/chat";
@@ -35,9 +35,24 @@ const FlightsCardList: React.FC<{
               <span style={{ fontWeight: "bold", color: "#38bdf8", fontSize: "14px" }}>
                 ✈️ {flight.airline || "Apex Air"} ({flight.flight_number})
               </span>
-              <span style={{ fontSize: "10px", color: "#94a3b8", background: "#334155", padding: "2px 8px", borderRadius: "12px" }}>
-                Scheduled
-              </span>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                {flight.direction && (
+                  <span style={{ 
+                    fontSize: "9px", 
+                    fontWeight: "bold",
+                    color: "#fff", 
+                    background: flight.direction === "outbound" ? "#0284c7" : "#7c3aed", 
+                    padding: "2px 8px", 
+                    borderRadius: "12px",
+                    textTransform: "uppercase"
+                  }}>
+                    {flight.direction}
+                  </span>
+                )}
+                <span style={{ fontSize: "10px", color: "#94a3b8", background: "#334155", padding: "2px 8px", borderRadius: "12px" }}>
+                  Scheduled
+                </span>
+              </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
@@ -671,40 +686,249 @@ const PaymentLinkCard: React.FC<{ payment: any }> = ({ payment }) => {
   );
 };
 
-const PassengerReviewCard: React.FC<{ data: any; onConfirm?: () => void }> = ({ data, onConfirm }) => {
+const PassengerReviewCard: React.FC<{ data: any; onConfirm?: (paxList: any[]) => void }> = ({ data, onConfirm }) => {
+  // If data has passengers list, use it. Otherwise, construct a default list with 1 passenger.
+  const initialPassengers = Array.isArray(data.passengers)
+    ? data.passengers.map((p: any) => ({
+        first_name: p.first_name || "",
+        last_name: p.last_name || "",
+        email: p.email || "",
+        passenger_type: p.passenger_type || "ADT",
+        title: p.title || "MR"
+      }))
+    : [{
+        first_name: data.name?.split(" ")[0] || "",
+        last_name: data.name?.split(" ").slice(1).join(" ") || "",
+        email: data.email || "",
+        passenger_type: "ADT",
+        title: "MR"
+      }];
+
+  const [passengers, setPassengers] = useState<any[]>(initialPassengers);
+
+  const updatePassenger = (index: number, key: string, val: string) => {
+    const updated = [...passengers];
+    updated[index] = { ...updated[index], [key]: val };
+    setPassengers(updated);
+  };
+
+  const handleConfirm = () => {
+    for (let i = 0; i < passengers.length; i++) {
+      if (!passengers[i].first_name || !passengers[i].last_name) {
+        message.warning(`Please fill in name for passenger ${i + 1}`);
+        return;
+      }
+    }
+    if (onConfirm) {
+      onConfirm(passengers);
+    }
+  };
+
   return (
     <div style={{
       background: "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)",
       border: "1px solid #bae6fd",
       borderLeft: "4px solid #0284c7",
       borderRadius: "10px",
-      padding: "12px 14px",
-      margin: "6px 0",
+      padding: "16px",
+      margin: "8px 0",
       color: "#0c4a6e",
       width: "100%",
       boxShadow: "0 2px 8px rgba(2, 132, 199, 0.08)"
     }}>
-      <div style={{ fontWeight: "700", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-        <span>📋</span> Passenger Review
+      <div style={{ fontWeight: "700", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", fontSize: "14px" }}>
+        <span>📋</span> Passenger Details Review
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: "12px" }}>
-        <span style={{ color: "#0369a1", fontWeight: "600" }}>Name</span>
-        <span style={{ fontWeight: "700", color: "#0c4a6e" }}>{data.name}</span>
-        <span style={{ color: "#0369a1", fontWeight: "600" }}>Email</span>
-        <span style={{ color: "#0c4a6e" }}>{data.email}</span>
-        <span style={{ color: "#0369a1", fontWeight: "600" }}>FF No.</span>
-        <span style={{ fontFamily: "monospace", color: "#0c4a6e", background: "#bae6fd", padding: "1px 6px", borderRadius: "4px", width: "fit-content" }}>{data.frequent_flyer || "N/A"}</span>
+      
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+        {passengers.map((pax, idx) => (
+          <div key={idx} style={{
+            background: "rgba(255, 255, 255, 0.6)",
+            border: "1px solid #e0f2fe",
+            borderRadius: "8px",
+            padding: "12px"
+          }}>
+            <div style={{ fontWeight: "600", fontSize: "12px", color: "#0369a1", marginBottom: "8px" }}>
+              Passenger #{idx + 1} ({pax.passenger_type})
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+              <div>
+                <label style={{ fontSize: "10px", color: "#0284c7", display: "block", marginBottom: "2px" }}>First Name</label>
+                <Input 
+                  size="small"
+                  value={pax.first_name}
+                  onChange={(e) => updatePassenger(idx, "first_name", e.target.value)}
+                  placeholder="First name"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "10px", color: "#0284c7", display: "block", marginBottom: "2px" }}>Last Name</label>
+                <Input 
+                  size="small"
+                  value={pax.last_name}
+                  onChange={(e) => updatePassenger(idx, "last_name", e.target.value)}
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: "10px", color: "#0284c7", display: "block", marginBottom: "2px" }}>Email</label>
+              <Input 
+                size="small"
+                value={pax.email}
+                onChange={(e) => updatePassenger(idx, "email", e.target.value)}
+                placeholder="Email address"
+              />
+            </div>
+          </div>
+        ))}
       </div>
-      {onConfirm && (
-        <Button 
-          type="primary" 
-          size="small" 
-          onClick={onConfirm}
-          style={{ marginTop: "10px", background: "#0284c7", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "12px" }}
-        >
-          ✓ Confirm & Proceed
-        </Button>
-      )}
+
+      <Button 
+        type="primary" 
+        block
+        onClick={handleConfirm}
+        style={{ background: "#0284c7", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "12px", height: "32px" }}
+      >
+        ✓ Confirm Passenger Details
+      </Button>
+    </div>
+  );
+};
+
+const PassengerOptionsCard: React.FC<{
+  data: any;
+  onConfirm?: (adults: number, children: number, infants: number) => void;
+}> = ({ data, onConfirm }) => {
+  const [adults, setAdults] = useState(data.defaults?.adults ?? 1);
+  const [children, setChildren] = useState(data.defaults?.children ?? 0);
+  const [infants, setInfants] = useState(data.defaults?.infants ?? 0);
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+      border: "1px solid #bfdbfe",
+      borderLeft: "4px solid #3b82f6",
+      borderRadius: "10px",
+      padding: "16px",
+      margin: "8px 0",
+      width: "100%",
+      boxShadow: "0 2px 8px rgba(59, 130, 246, 0.08)"
+    }}>
+      <div style={{ fontWeight: "700", color: "#1e3a8a", fontSize: "14px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+        <span>👥</span> Select Passenger Counts
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+        {/* Adults */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontWeight: "600", fontSize: "12px", color: "#1e40af" }}>Adults</div>
+            <div style={{ fontSize: "11px", color: "#60a5fa" }}>Age 12+</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Button size="small" shape="circle" onClick={() => setAdults(Math.max(1, adults - 1))}>-</Button>
+            <span style={{ fontWeight: "bold", width: "16px", textAlign: "center", fontSize: "13px", color: "#000" }}>{adults}</span>
+            <Button size="small" shape="circle" onClick={() => setAdults(adults + 1)}>+</Button>
+          </div>
+        </div>
+
+        {/* Children */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontWeight: "600", fontSize: "12px", color: "#1e40af" }}>Children</div>
+            <div style={{ fontSize: "11px", color: "#60a5fa" }}>Age 2-11</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Button size="small" shape="circle" onClick={() => setChildren(Math.max(0, children - 1))}>-</Button>
+            <span style={{ fontWeight: "bold", width: "16px", textAlign: "center", fontSize: "13px", color: "#000" }}>{children}</span>
+            <Button size="small" shape="circle" onClick={() => setChildren(children + 1)}>+</Button>
+          </div>
+        </div>
+
+        {/* Infants */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontWeight: "600", fontSize: "12px", color: "#1e40af" }}>Infants</div>
+            <div style={{ fontSize: "11px", color: "#60a5fa" }}>Under age 2</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Button size="small" shape="circle" onClick={() => setInfants(Math.max(0, infants - 1))}>-</Button>
+            <span style={{ fontWeight: "bold", width: "16px", textAlign: "center", fontSize: "13px", color: "#000" }}>{infants}</span>
+            <Button size="small" shape="circle" onClick={() => setInfants(infants + 1)}>+</Button>
+          </div>
+        </div>
+      </div>
+      
+      <Button 
+        type="primary" 
+        block 
+        onClick={() => onConfirm && onConfirm(adults, children, infants)}
+        style={{ background: "#2563eb", borderColor: "#2563eb", borderRadius: "6px", fontWeight: "bold", fontSize: "12px", height: "32px" }}
+      >
+        Confirm Passengers
+      </Button>
+    </div>
+  );
+};
+
+const TimeSliderCard: React.FC<{
+  data: any;
+  onConfirm?: (startHour: number, endHour: number) => void;
+}> = ({ data, onConfirm }) => {
+  const [range, setRange] = useState<[number, number]>([data.default?.[0] ?? 6, data.default?.[1] ?? 22]);
+
+  const formatHour = (h: number) => {
+    if (h === 0 || h === 24) return "12 AM";
+    if (h === 12) return "12 PM";
+    if (h < 12) return `${h} AM`;
+    return `${h - 12} PM`;
+  };
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)",
+      border: "1px solid #e9d5ff",
+      borderLeft: "4px solid #a855f7",
+      borderRadius: "10px",
+      padding: "16px",
+      margin: "8px 0",
+      width: "100%",
+      boxShadow: "0 2px 8px rgba(168, 85, 247, 0.08)"
+    }}>
+      <div style={{ fontWeight: "700", color: "#6b21a8", fontSize: "14px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+        <span>🕒</span> Select Departure Time Range
+      </div>
+      <div style={{ fontSize: "13px", color: "#7e22ce", marginBottom: "16px", textAlign: "center", fontWeight: "bold" }}>
+        Selected Range: {formatHour(range[0])} to {formatHour(range[1])}
+      </div>
+      <div style={{ padding: "0 10px", marginBottom: "20px" }}>
+        <Slider
+          range
+          min={0}
+          max={24}
+          step={1}
+          value={range}
+          onChange={(val) => setRange(val as [number, number])}
+          tooltip={{
+            formatter: (val) => formatHour(val ?? 0)
+          }}
+          marks={{
+            0: "12 AM",
+            6: "6 AM",
+            12: "12 PM",
+            18: "6 PM",
+            24: "12 AM"
+          }}
+        />
+      </div>
+      <Button 
+        type="primary" 
+        block 
+        onClick={() => onConfirm && onConfirm(range[0], range[1])}
+        style={{ background: "#9333ea", borderColor: "#9333ea", borderRadius: "6px", fontWeight: "bold", fontSize: "12px", height: "32px" }}
+      >
+        Confirm Time Range
+      </Button>
     </div>
   );
 };
@@ -1551,7 +1775,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
 
                       if (isJson && parsedData !== null) {
                         // Auto-detect schema if language is "json" or not specified
-                        const knownLangs = ["flights", "tickets", "payment", "passenger-review", "seats-options", "meal-options", "options", "confirm", "ancillary-options", "checkin-declaration", "loyalty-upgrade", "flight-status"];
+                        const knownLangs = ["flights", "tickets", "payment", "passenger-review", "seats-options", "meal-options", "options", "confirm", "ancillary-options", "checkin-declaration", "loyalty-upgrade", "flight-status", "passenger-options", "time-slider"];
                         if (lang === "json" || lang === "" || !knownLangs.includes(lang)) {
                           if (Array.isArray(parsedData)) {
                             if (parsedData.length > 0) {
@@ -1574,9 +1798,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                               lang = "seats-options";
                             } else if (parsedData.pnr && (parsedData.price !== undefined || parsedData.amount !== undefined) && parsedData.flight_number) {
                               lang = "payment";
-                            } else if (parsedData.name && parsedData.email) {
-                              // Catches passenger JSON even if LLM emitted wrong/missing code fence tag
+                            } else if ((parsedData.name && parsedData.email) || (parsedData.passengers && Array.isArray(parsedData.passengers))) {
                               lang = "passenger-review";
+                            } else if (parsedData.title && parsedData.defaults && parsedData.defaults.adults !== undefined) {
+                              lang = "passenger-options";
+                            } else if (parsedData.title && parsedData.min !== undefined && parsedData.max !== undefined && parsedData.default !== undefined) {
+                              lang = "time-slider";
                             } else if (parsedData.question && parsedData.yes_text && parsedData.no_text) {
                               lang = "confirm";
                             } else if (parsedData.pnr && parsedData.passenger_name && parsedData.is_checkin) {
@@ -1608,7 +1835,27 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                           return (
                             <PassengerReviewCard 
                               data={parsedData} 
-                              onConfirm={() => onSendMessage?.(`I confirm my passenger details: Name: ${parsedData.name}, Email: ${parsedData.email}. Please proceed.`)}
+                              onConfirm={(paxList) => onSendMessage?.(`I confirm my passenger details: ${JSON.stringify(paxList)}`)}
+                            />
+                          );
+                        }
+                        if (lang === "passenger-options") {
+                          return (
+                            <PassengerOptionsCard 
+                              data={parsedData} 
+                              onConfirm={(adults, children, infants) => {
+                                onSendMessage?.(`I want to search for flights with ${adults} adults, ${children} children, ${infants} infants`);
+                              }}
+                            />
+                          );
+                        }
+                        if (lang === "time-slider") {
+                          return (
+                            <TimeSliderCard 
+                              data={parsedData} 
+                              onConfirm={(start, end) => {
+                                onSendMessage?.(`Set departure time range to ${start}:00 - ${end}:00`);
+                              }}
                             />
                           );
                         }

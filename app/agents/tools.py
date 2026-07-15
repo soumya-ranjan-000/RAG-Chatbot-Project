@@ -35,15 +35,18 @@ def check_booking_status(pnr: str) -> dict:
         return {"error": f"Failed to connect to PSS: {e}"}
 
 @tool
-def book_flight(passenger_id: str, origin: str, destination: str, date: str, booking_class: str = "Y") -> dict:
+def book_flight(passenger_id: str, origin: str, destination: str, date: str, booking_class: str = "Y", passengers: list = None, return_date: str = None, return_booking_class: str = None) -> dict:
     """
-    Creates a new flight booking for the given passenger from origin to destination on the specified date (YYYY-MM-DD).
+    Creates a new flight booking for the primary passenger. Supports round trips and multiple passengers.
     Input parameters:
-      - passenger_id: Unique passenger identifier or legacy ID.
+      - passenger_id: Unique passenger identifier or legacy ID of the primary passenger.
       - origin: Three-letter departure airport code (e.g. BLR, JFK).
       - destination: Three-letter arrival airport code (e.g. JFK, LAX).
-      - date: Departure date (YYYY-MM-DD).
-      - booking_class: Booking class letter (e.g., 'B' for Economy Light, 'Y' for Economy Flex, 'J' for Business Flex). Defaults to 'Y'.
+      - date: Departure date (YYYY-MM-DD) for outbound flight.
+      - booking_class: Booking class letter (e.g. 'Y'). Defaults to 'Y'.
+      - passengers: Optional list of additional passenger details dictionaries, each with keys like: 'first_name', 'last_name', 'email', 'passenger_type' (ADT, CHD, INF).
+      - return_date: Optional return date (YYYY-MM-DD) for a round-trip booking.
+      - return_booking_class: Optional return booking class letter.
     Returns the booking confirmation including the generated PNR code.
     """
     try:
@@ -53,9 +56,12 @@ def book_flight(passenger_id: str, origin: str, destination: str, date: str, boo
             "destination": destination,
             "date": date,
             "status": "pending-payment",
-            "booking_class": booking_class
+            "booking_class": booking_class,
+            "passengers": passengers,
+            "return_date": return_date,
+            "return_booking_class": return_booking_class
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to book flight.")}
@@ -97,9 +103,9 @@ def reschedule_flight(pnr: str, new_date: str, new_flight: str) -> dict:
         return {"error": f"Failed to connect to PSS: {e}"}
 
 @tool
-def search_flights(origin: str = None, destination: str = None, date: str = None) -> list:
+def search_flights(origin: str = None, destination: str = None, date: str = None, time_range: str = None) -> list:
     """
-    Searches and lists scheduled flights matching the given origin, destination airport codes (e.g. BLR, JFK, LAX), and optional date (e.g. 2026-08-15).
+    Searches and lists scheduled flights matching the given origin, destination airport codes (e.g. BLR, JFK, LAX), optional date (e.g. 2026-08-15), and optional time range (e.g. morning, afternoon, evening, night, or time ranges like 13:00-17:00).
     Use this to find available flight numbers, departure dates/times, and prices before booking.
     """
     try:
@@ -110,7 +116,9 @@ def search_flights(origin: str = None, destination: str = None, date: str = None
             params["destination"] = destination
         if date:
             params["date"] = date
-        response = httpx.get(f"{PSS_API_URL}/flights", params=params)
+        if time_range:
+            params["time_range"] = time_range
+        response = httpx.get(f"{PSS_API_URL}/flights", params=params, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": "Failed to retrieve flights."}
@@ -146,19 +154,20 @@ def list_passenger_bookings(passenger_id: str) -> list:
         return {"error": f"Failed to connect to PSS: {e}"}
 
 @tool
-def select_seat_tool(pnr: str, passenger_id: str, seat_number: str) -> dict:
+def select_seat_tool(pnr: str, passenger_id: str, seat_number: str, flight_id: str = None) -> dict:
     """
-    Selects a specific seat (e.g. 14A, 12B) for a passenger on their flight using their PNR and passenger ID.
+    Selects a specific seat (e.g. 14A, 12B) for a passenger on their flight using their PNR, passenger ID, and optional flight_id / flight_number.
     """
     try:
         payload = {
             "passenger_id": passenger_id,
-            "seat_number": seat_number
+            "seat_number": seat_number,
+            "flight_id": flight_id
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/seat", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/seat", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
-        return {"error": response.json().get("detail", "Failed to select seat.")}
+        return {"error": response.json().get("detail", f"Failed to select seat {seat_number} for PNR {pnr}.")}
     except Exception as e:
         return {"error": f"Failed to connect to PSS: {e}"}
 
@@ -337,3 +346,25 @@ def check_flight_status_tool(flight_number: str, date: str = None) -> dict:
     except Exception as e:
         return {"error": f"Failed to connect to PSS: {e}"}
 
+
+@tool
+def search_company_policy_tool(query: str) -> str:
+    """
+    Search the company policies, guidelines, and manuals using a vector retrieval system.
+    Use this tool to answer user questions about baggage rules, cancellations, pets, or any general airline policies.
+    """
+    try:
+        from retrieval import search_vector_chunks
+        results = search_vector_chunks(query, top_k=3)
+        if not results:
+            return "No relevant policy documents found."
+        
+        context_parts = []
+        for r in results:
+            content = r.get("chunk_content", "")
+            title = r.get("document_name", "Unknown Document")
+            context_parts.append(f"Source: {title}\n{content}")
+            
+        return "\n\n".join(context_parts)
+    except Exception as e:
+        return f"Failed to retrieve policies: {e}"

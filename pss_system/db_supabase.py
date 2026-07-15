@@ -31,40 +31,157 @@ if not SUPABASE_URL or not SUPABASE_KEY or "your-service-role-key" in SUPABASE_K
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+def get_booking(pnr: str) -> dict:
+    pnr_upper = pnr.upper()
+    logger.info(f"DB Query: Fetching booking {pnr_upper}")
+    
+    res_pnr = supabase.table("pss_pnrs").select("*").eq("pnr_code", pnr_upper).execute()
+    if not res_pnr.data:
+        return None
+    pnr_row = res_pnr.data[0]
+    pnr_id = pnr_row["pnr_id"]
+    primary_passenger_id = pnr_row["primary_passenger_id"]
+
+    # Get passengers in this PNR
+    res_pax = supabase.table("pss_pnr_passengers")\
+        .select("passenger_id, passenger_type, is_primary")\
+        .eq("pnr_id", pnr_id)\
+        .execute()
+        
+    pax_list = []
+    primary_pax = None
+    for p in res_pax.data:
+        res_profile = supabase.table("pss_passengers")\
+            .select("passenger_id, legacy_id, first_name, last_name, email, frequent_flyer_number")\
+            .eq("passenger_id", p["passenger_id"])\
+            .execute()
+        if res_profile.data:
+            profile = res_profile.data[0]
+            name = f"{profile['first_name']} {profile['last_name']}"
+            pax_info = {
+                "passenger_id": profile["legacy_id"] or str(profile["passenger_id"]),
+                "uuid": str(profile["passenger_id"]),
+                "name": name,
+                "first_name": profile["first_name"],
+                "last_name": profile["last_name"],
+                "email": profile["email"],
+                "frequent_flyer": profile["frequent_flyer_number"],
+                "passenger_type": p["passenger_type"],
+                "is_primary": p["is_primary"]
+            }
+            pax_list.append(pax_info)
+            if p["is_primary"] or p["passenger_id"] == primary_passenger_id:
+                primary_pax = pax_info
+
+    if not primary_pax and pax_list:
+        primary_pax = pax_list[0]
+
+    # Get segments
+    res_segs = supabase.table("pss_pnr_segments")\
+        .select("*")\
+        .eq("pnr_id", pnr_id)\
+        .order("segment_number")\
+        .execute()
+        
+    segs_list = []
+    for s in res_segs.data:
+        # Get flight details
+        res_flight = supabase.table("vw_flight_availability")\
+            .select("*")\
+            .eq("flight_id", s["flight_id"])\
+            .limit(1)\
+            .execute()
+            
+        flight_num = "N/A"
+        origin = "N/A"
+        destination = "N/A"
+        dep_datetime = "N/A"
+        dep_time = "N/A"
+        airline = "Apex Air"
+        gate = "B3"
+        
+        if res_flight.data:
+            f = res_flight.data[0]
+            flight_num = f.get("flight_number")
+            origin = f.get("origin")
+            destination = f.get("destination")
+            dep_datetime = f.get("departure_datetime", "")
+            dep_time = dep_datetime.split("T")[1][:5] if dep_datetime and "T" in dep_datetime else ""
+            airline = f.get("airline_name") or "Apex Air"
+            gate = f.get("gate") or "B3"
+            
+        # Get seat number
+        seat_num = None
+        if s.get("seat_id"):
+            res_seat = supabase.table("pss_seat_map")\
+                .select("seat_number")\
+                .eq("seat_id", s["seat_id"])\
+                .execute()
+            if res_seat.data:
+                seat_num = res_seat.data[0]["seat_number"]
+                
+        # Find which passenger this segment belongs to by checking who is assigned to the seat
+        assigned_pax_id = None
+        if s.get("seat_id"):
+            res_seat_pax = supabase.table("pss_seat_map").select("passenger_id").eq("seat_id", s["seat_id"]).execute()
+            if res_seat_pax.data:
+                pax_uuid_seat = res_seat_pax.data[0].get("passenger_id")
+                # find in pax_list
+                for p in pax_list:
+                    if p["uuid"] == str(pax_uuid_seat):
+                        assigned_pax_id = p["passenger_id"]
+                        break
+                        
+        segs_list.append({
+            "segment_id": s["segment_id"],
+            "flight_id": str(s["flight_id"]),
+            "flight_number": flight_num,
+            "origin": origin,
+            "destination": destination,
+            "departure_datetime": dep_datetime,
+            "departure_time": dep_time,
+            "date": dep_datetime[:10] if dep_datetime else "N/A",
+            "gate": gate,
+            "seat": seat_num,
+            "status": s["segment_status"],
+            "airline": airline,
+            "booking_class": s["booking_class"],
+            "cabin_class": s["cabin_class"],
+            "passenger_id": assigned_pax_id
+        })
+
+    # Fallback/Legacy properties mapping using first segment & primary passenger
+    first_seg = segs_list[0] if segs_list else {}
+    
+    booking_dict = {
+        "pnr": pnr_upper,
+        "pnr_id": str(pnr_id),
+        "status": pnr_row["status"],
+        "total_amount": float(pnr_row["total_amount_usd"] or 0.0),
+        "passenger_id": primary_pax["passenger_id"] if primary_pax else None,
+        "passenger_name": primary_pax["name"] if primary_pax else None,
+        "flight_number": first_seg.get("flight_number"),
+        "flight_id": first_seg.get("flight_id"),
+        "origin": first_seg.get("origin"),
+        "destination": first_seg.get("destination"),
+        "date": first_seg.get("date"),
+        "gate": first_seg.get("gate"),
+        "seat": first_seg.get("seat"),
+        "airline": first_seg.get("airline"),
+        "booking_class": first_seg.get("booking_class"),
+        "cabin_class": first_seg.get("cabin_class"),
+        "passengers": pax_list,
+        "segments": segs_list
+    }
+    return booking_dict
+
 def map_booking(row: dict) -> dict:
     if not row:
         return {}
-    dep_date = row.get("departure_datetime", "")
-    dep_datetime = dep_date
-    if dep_date and len(dep_date) >= 10:
-        dep_date = dep_date[:10]
-        
-    flight_id = None
-    pnr_id = row.get("pnr_id")
-    if pnr_id:
-        try:
-            res_seg = supabase.table("pss_pnr_segments").select("flight_id").eq("pnr_id", pnr_id).limit(1).execute()
-            if res_seg.data:
-                flight_id = res_seg.data[0]["flight_id"]
-        except Exception as e:
-            logger.warning(f"Failed to query flight_id from segments: {e}")
-            
-    return {
-        "pnr": row.get("pnr_code"),
-        "passenger_id": row.get("legacy_id") or str(row.get("passenger_id")),
-        "passenger_name": row.get("passenger_name"),
-        "flight_number": row.get("flight_number"),
-        "flight_id": flight_id,
-        "origin": row.get("from_airport"),
-        "destination": row.get("to_airport"),
-        "date": dep_date,
-        "gate": row.get("gate"),
-        "seat": row.get("seat_number"),
-        "status": row.get("booking_status"),
-        "airline": row.get("airline"),
-        "booking_class": row.get("booking_class"),
-        "cabin_class": row.get("cabin_class")
-    }
+    pnr_code = row.get("pnr_code")
+    if pnr_code:
+        return get_booking(pnr_code)
+    return {}
 
 def get_passenger_profile(passenger_id: str) -> dict:
     logger.info(f"DB Query: Fetching passenger profile for {passenger_id}")
@@ -104,15 +221,7 @@ def get_passenger_profile(passenger_id: str) -> dict:
         "bookings": bookings
     }
 
-def get_booking(pnr: str) -> dict:
-    pnr_upper = pnr.upper()
-    logger.info(f"DB Query: Fetching booking {pnr_upper}")
-    res = supabase.table("vw_passenger_itinerary").select("*").eq("pnr_code", pnr_upper).execute()
-    if res.data:
-        return map_booking(res.data[0])
-    return None
-
-def create_booking(passenger_id: str, origin: str, destination: str, date: str, status: str = "booked", booking_class: str = "Y") -> dict:
+def create_booking(passenger_id: str, origin: str, destination: str, date: str, status: str = "booked", booking_class: str = "Y", passengers: list = None, return_date: str = None, return_booking_class: str = None) -> dict:
     logger.info(f"DB Action: Creating booking for pax={passenger_id}, origin={origin}, dest={destination}, class={booking_class}")
     
     is_uuid = False
@@ -122,7 +231,7 @@ def create_booking(passenger_id: str, origin: str, destination: str, date: str, 
     except ValueError:
         pass
 
-    query = supabase.table("pss_passengers").select("passenger_id, first_name, last_name")
+    query = supabase.table("pss_passengers").select("passenger_id, first_name, last_name, email")
     if is_uuid:
         res_pax = query.or_(f"passenger_id.eq.{passenger_id},legacy_id.eq.{passenger_id}").execute()
     else:
@@ -130,8 +239,41 @@ def create_booking(passenger_id: str, origin: str, destination: str, date: str, 
 
     if not res_pax.data:
         raise ValueError("Passenger profile not found")
-    pax_uuid = res_pax.data[0]["passenger_id"]
-    pax_name = f"{res_pax.data[0]['first_name']} {res_pax.data[0]['last_name']}"
+    primary_pax = res_pax.data[0]
+    pax_uuid = primary_pax["passenger_id"]
+    pax_name = f"{primary_pax['first_name']} {primary_pax['last_name']}"
+
+    passenger_ids = []
+    if passengers:
+        for idx, p in enumerate(passengers):
+            first_name = p.get("first_name", "").strip()
+            last_name = p.get("last_name", "").strip()
+            email = p.get("email", "").strip()
+            p_type = p.get("passenger_type", "ADT").upper()
+            if not email:
+                email = f"{first_name.lower()}.{last_name.lower()}@example.com"
+                
+            res_p_check = supabase.table("pss_passengers").select("passenger_id").eq("email", email).execute()
+            if res_p_check.data:
+                p_uuid = res_p_check.data[0]["passenger_id"]
+            else:
+                title_val = p.get("title", "MR").upper() if p.get("title") else "MR"
+                if title_val not in ['MR', 'MRS', 'MS', 'DR', 'PROF']:
+                    title_val = 'MR'
+                new_pax = {
+                    "first_name": first_name or "Passenger",
+                    "last_name": last_name or "Guest",
+                    "email": email,
+                    "title": title_val
+                }
+                res_p_ins = supabase.table("pss_passengers").insert(new_pax).execute()
+                if not res_p_ins.data:
+                    raise ValueError(f"Failed to create profile for passenger {first_name} {last_name}")
+                p_uuid = res_p_ins.data[0]["passenger_id"]
+                
+            passenger_ids.append((p_uuid, p_type, f"{first_name} {last_name}"))
+    else:
+        passenger_ids.append((pax_uuid, "ADT", pax_name))
 
     # Find matching flight
     res_flights = supabase.table("vw_flight_availability").select("*")\
@@ -143,43 +285,64 @@ def create_booking(passenger_id: str, origin: str, destination: str, date: str, 
         raise ValueError(f"No flights found from {origin} to {destination}")
 
     # Use first flight matching date and booking_class, fallback to matching date, fallback to first available
-    flight = None
+    outbound_flight = None
     for f in res_flights.data:
         if f.get("departure_datetime", "").startswith(date) and f.get("booking_class") == booking_class.upper():
-            flight = f
+            outbound_flight = f
             break
             
-    if not flight:
+    if not outbound_flight:
         for f in res_flights.data:
             if f.get("departure_datetime", "").startswith(date):
-                flight = f
+                outbound_flight = f
                 break
                 
-    if not flight:
-        flight = res_flights.data[0]
+    if not outbound_flight:
+        outbound_flight = res_flights.data[0]
 
-    flight_id = flight["flight_id"]
-    fare_id = flight.get("fare_id")
-    base_fare = float(flight.get("base_fare_usd") or 290.00)
-    taxes = 65.00
-    total_amount = base_fare + taxes
-    booking_class = flight.get("booking_class") or booking_class or 'Y'
-    cabin_class = flight.get("cabin_class") or 'economy'
+    outbound_flight_id = outbound_flight["flight_id"]
+    outbound_fare_id = outbound_flight.get("fare_id")
+    outbound_base_fare = float(outbound_flight.get("base_fare_usd") or 290.00)
+    outbound_taxes = 65.00
+    outbound_booking_class = outbound_flight.get("booking_class") or booking_class or 'Y'
+    outbound_cabin_class = outbound_flight.get("cabin_class") or 'economy'
 
-    # Find an available seat
-    res_seats = supabase.table("pss_seat_map").select("seat_id, seat_number")\
-        .eq("flight_id", flight_id)\
-        .eq("is_occupied", False)\
-        .eq("is_blocked", False)\
-        .eq("cabin_class", cabin_class)\
-        .limit(1)\
-        .execute()
-        
-    seat_id = None
-    seat_number = "12A"
-    if res_seats.data:
-        seat_id = res_seats.data[0]["seat_id"]
-        seat_number = res_seats.data[0]["seat_number"]
+    return_flight = None
+    return_base_fare = 0.0
+    return_taxes = 0.0
+    if return_date:
+        res_ret_flights = supabase.table("vw_flight_availability").select("*")\
+            .eq("origin", destination.upper())\
+            .eq("destination", origin.upper())\
+            .execute()
+            
+        if not res_ret_flights.data:
+            raise ValueError(f"No return flights found from {destination} to {origin}")
+
+        ret_class = (return_booking_class or booking_class or "Y").upper()
+        for f in res_ret_flights.data:
+            if f.get("departure_datetime", "").startswith(return_date) and f.get("booking_class") == ret_class:
+                return_flight = f
+                break
+        if not return_flight:
+            for f in res_ret_flights.data:
+                if f.get("departure_datetime", "").startswith(return_date):
+                    return_flight = f
+                    break
+        if not return_flight:
+            return_flight = res_ret_flights.data[0]
+
+        return_flight_id = return_flight["flight_id"]
+        return_fare_id = return_flight.get("fare_id")
+        return_base_fare = float(return_flight.get("base_fare_usd") or 290.00)
+        return_taxes = 65.00
+        return_booking_class = return_flight.get("booking_class") or ret_class or 'Y'
+        return_cabin_class = return_flight.get("cabin_class") or 'economy'
+
+    num_pax = len(passenger_ids)
+    total_base_fare = (outbound_base_fare + return_base_fare) * num_pax
+    total_taxes = (outbound_taxes + return_taxes) * num_pax
+    total_amount = total_base_fare + total_taxes
 
     pnr_code = f"PNR{uuid.uuid4().hex[:3].upper()}"
     pnr_status = "confirmed"
@@ -194,8 +357,8 @@ def create_booking(passenger_id: str, origin: str, destination: str, date: str, 
         "primary_passenger_id": pax_uuid,
         "status": pnr_status,
         "channel": "web",
-        "total_base_fare_usd": base_fare,
-        "total_taxes_usd": taxes,
+        "total_base_fare_usd": total_base_fare,
+        "total_taxes_usd": total_taxes,
         "total_amount_usd": total_amount,
         "expires_at": (datetime.now() + timedelta(days=1)).isoformat()
     }
@@ -204,56 +367,136 @@ def create_booking(passenger_id: str, origin: str, destination: str, date: str, 
         raise ValueError("Failed to create PNR record")
     pnr_id = res_pnr.data[0]["pnr_id"]
 
-    # Insert Segment
-    segment_data = {
-        "pnr_id": pnr_id,
-        "flight_id": flight_id,
-        "fare_id": fare_id,
-        "segment_number": 1,
-        "booking_class": booking_class,
-        "cabin_class": cabin_class,
-        "seat_id": seat_id,
-        "segment_status": "confirmed",
-        "base_fare_usd": base_fare,
-        "taxes_usd": taxes,
-        "baggage_allowance_kg": 23
-    }
-    supabase.table("pss_pnr_segments").insert(segment_data).execute()
+    # Insert PNR Passengers
+    for idx, (p_uuid, p_type, name) in enumerate(passenger_ids):
+        pnr_pax_data = {
+            "pnr_id": pnr_id,
+            "passenger_id": p_uuid,
+            "is_primary": (idx == 0),
+            "passenger_type": p_type
+        }
+        supabase.table("pss_pnr_passengers").insert(pnr_pax_data).execute()
 
-    # Assign seat
-    if seat_id:
-        supabase.table("pss_seat_map").update({
-            "is_occupied": True,
-            "passenger_id": pax_uuid,
-            "pnr_id": pnr_id
-        }).eq("seat_id", seat_id).execute()
+    # Assign seats and segments
+    outbound_seat_number = "12A"
+    
+    for idx, (p_uuid, p_type, name) in enumerate(passenger_ids):
+        # 1. Outbound segment
+        res_seats = supabase.table("pss_seat_map").select("seat_id, seat_number")\
+            .eq("flight_id", outbound_flight_id)\
+            .eq("is_occupied", False)\
+            .eq("is_blocked", False)\
+            .eq("cabin_class", outbound_cabin_class)\
+            .limit(1)\
+            .execute()
+            
+        outbound_seat_id = None
+        if res_seats.data:
+            outbound_seat_id = res_seats.data[0]["seat_id"]
+            if idx == 0:
+                outbound_seat_number = res_seats.data[0]["seat_number"]
 
-    # Decrement inventory
-    res_inv = supabase.table("pss_inventory").select("available_seats, sold_seats")\
-        .eq("flight_id", flight_id)\
-        .eq("booking_class", booking_class)\
-        .execute()
-    if res_inv.data:
-        inv = res_inv.data[0]
-        supabase.table("pss_inventory").update({
-            "available_seats": max(0, inv["available_seats"] - 1),
-            "sold_seats": inv["sold_seats"] + 1
-        }).eq("flight_id", flight_id).eq("booking_class", booking_class).execute()
+        outbound_seg_data = {
+            "pnr_id": pnr_id,
+            "flight_id": outbound_flight_id,
+            "fare_id": outbound_fare_id,
+            "segment_number": 1,
+            "booking_class": outbound_booking_class,
+            "cabin_class": outbound_cabin_class,
+            "seat_id": outbound_seat_id,
+            "segment_status": "confirmed",
+            "base_fare_usd": outbound_base_fare,
+            "taxes_usd": outbound_taxes,
+            "baggage_allowance_kg": 23
+        }
+        supabase.table("pss_pnr_segments").insert(outbound_seg_data).execute()
+
+        if outbound_seat_id:
+            supabase.table("pss_seat_map").update({
+                "is_occupied": True,
+                "passenger_id": p_uuid,
+                "pnr_id": pnr_id
+            }).eq("seat_id", outbound_seat_id).execute()
+
+        # Decrement inventory outbound
+        res_inv = supabase.table("pss_inventory").select("available_seats, sold_seats")\
+            .eq("flight_id", outbound_flight_id)\
+            .eq("booking_class", outbound_booking_class)\
+            .execute()
+        if res_inv.data:
+            inv = res_inv.data[0]
+            supabase.table("pss_inventory").update({
+                "available_seats": max(0, inv["available_seats"] - 1),
+                "sold_seats": inv["sold_seats"] + 1
+            }).eq("flight_id", outbound_flight_id).eq("booking_class", outbound_booking_class).execute()
+
+        # 2. Return segment
+        if return_flight:
+            res_ret_seats = supabase.table("pss_seat_map").select("seat_id, seat_number")\
+                .eq("flight_id", return_flight_id)\
+                .eq("is_occupied", False)\
+                .eq("is_blocked", False)\
+                .eq("cabin_class", return_cabin_class)\
+                .limit(1)\
+                .execute()
+                
+            return_seat_id = None
+            if res_ret_seats.data:
+                return_seat_id = res_ret_seats.data[0]["seat_id"]
+
+            return_seg_data = {
+                "pnr_id": pnr_id,
+                "flight_id": return_flight_id,
+                "fare_id": return_fare_id,
+                "segment_number": 2,
+                "booking_class": return_booking_class,
+                "cabin_class": return_cabin_class,
+                "seat_id": return_seat_id,
+                "segment_status": "confirmed",
+                "base_fare_usd": return_base_fare,
+                "taxes_usd": return_taxes,
+                "baggage_allowance_kg": 23
+            }
+            supabase.table("pss_pnr_segments").insert(return_seg_data).execute()
+
+            if return_seat_id:
+                supabase.table("pss_seat_map").update({
+                    "is_occupied": True,
+                    "passenger_id": p_uuid,
+                    "pnr_id": pnr_id
+                }).eq("seat_id", return_seat_id).execute()
+
+            # Decrement inventory return
+            res_inv_ret = supabase.table("pss_inventory").select("available_seats, sold_seats")\
+                .eq("flight_id", return_flight_id)\
+                .eq("booking_class", return_booking_class)\
+                .execute()
+            if res_inv_ret.data:
+                inv_ret = res_inv_ret.data[0]
+                supabase.table("pss_inventory").update({
+                    "available_seats": max(0, inv_ret["available_seats"] - 1),
+                    "sold_seats": inv_ret["sold_seats"] + 1
+                }).eq("flight_id", return_flight_id).eq("booking_class", return_booking_class).execute()
 
     return {
         "pnr": pnr_code,
         "passenger_id": passenger_id,
         "passenger_name": pax_name,
-        "flight_number": flight["flight_number"],
+        "flight_number": outbound_flight["flight_number"],
         "origin": origin.upper(),
         "destination": destination.upper(),
         "date": date,
-        "gate": flight.get("gate") or "B3",
-        "seat": seat_number,
+        "gate": outbound_flight.get("gate") or "B3",
+        "seat": outbound_seat_number,
         "status": status,
-        "airline": flight.get("airline_name"),
-        "booking_class": booking_class,
-        "cabin_class": cabin_class
+        "airline": outbound_flight.get("airline_name") or "Apex Air",
+        "booking_class": outbound_booking_class,
+        "cabin_class": outbound_cabin_class,
+        "price": total_amount,
+        "passengers": [{"passenger_id": pid, "name": name, "type": ptype} for pid, ptype, name in passenger_ids],
+        "is_round_trip": bool(return_flight),
+        "return_flight_number": return_flight["flight_number"] if return_flight else None,
+        "return_date": return_date if return_flight else None
     }
 
 def cancel_booking(pnr: str) -> bool:
@@ -380,15 +623,40 @@ def reschedule_booking(pnr: str, new_date: str, new_flight: str) -> dict:
         return updated_b
     raise ValueError("Booking not found")
 
-def get_flights(origin: str = None, destination: str = None, date: str = None) -> list:
-    logger.info(f"DB Query: Fetching flights origin={origin}, destination={destination}, date={date}")
+def get_flights(origin: str = None, destination: str = None, date: str = None, time_range: str = None) -> list:
+    logger.info(f"DB Query: Fetching flights origin={origin}, destination={destination}, date={date}, time_range={time_range}")
     query = supabase.table("vw_flight_availability").select("*")
     if origin:
         query = query.eq("origin", origin.upper())
     if destination:
         query = query.eq("destination", destination.upper())
+        
+    start_time = "00:00:00"
+    end_time = "23:59:59"
+    if time_range:
+        tr = time_range.strip().lower()
+        if tr == "morning":
+            start_time = "06:00:00"
+            end_time = "12:00:00"
+        elif tr == "afternoon":
+            start_time = "12:00:00"
+            end_time = "17:00:00"
+        elif tr == "evening":
+            start_time = "17:00:00"
+            end_time = "21:00:00"
+        elif tr == "night":
+            start_time = "21:00:00"
+            end_time = "23:59:59"
+        elif "-" in tr:
+            parts = tr.split("-")
+            if len(parts) == 2:
+                p0 = parts[0].strip()
+                p1 = parts[1].strip()
+                start_time = p0 + ":00" if len(p0) == 5 else p0
+                end_time = p1 + ":00" if len(p1) == 5 else p1
+                
     if date:
-        query = query.gte("departure_datetime", f"{date}T00:00:00").lte("departure_datetime", f"{date}T23:59:59")
+        query = query.gte("departure_datetime", f"{date}T{start_time}").lte("departure_datetime", f"{date}T{end_time}")
         
     res = query.execute()
     
@@ -475,45 +743,91 @@ def get_all_bookings() -> list:
             bookings[pnr] = map_booking(row)
     return list(bookings.values())
 
-def select_seat(pnr: str, passenger_id: str, seat_number: str) -> dict:
+def select_seat(pnr: str, passenger_id: str, seat_number: str, flight_id: str = None) -> dict:
     pnr_upper = pnr.upper()
     res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id").eq("pnr_code", pnr_upper).execute()
     if not res_pnr.data:
         raise ValueError("Booking not found")
     pnr_id = res_pnr.data[0]["pnr_id"]
     
+    is_uuid = False
+    try:
+        uuid.UUID(passenger_id)
+        is_uuid = True
+    except ValueError:
+        pass
+
+    query = supabase.table("pss_passengers").select("passenger_id")
+    if is_uuid:
+        res_pax = query.or_(f"passenger_id.eq.{passenger_id},legacy_id.eq.{passenger_id}").execute()
+    else:
+        res_pax = query.eq("legacy_id", passenger_id).execute()
+
+    if not res_pax.data:
+        raise ValueError("Passenger profile not found")
+    pax_uuid = res_pax.data[0]["passenger_id"]
+
+    flight_uuid = None
+    if flight_id:
+        try:
+            uuid.UUID(flight_id)
+            flight_uuid = flight_id
+        except ValueError:
+            res_fl = supabase.table("pss_flights").select("flight_id").eq("flight_number", flight_id.upper()).limit(1).execute()
+            if res_fl.data:
+                flight_uuid = res_fl.data[0]["flight_id"]
+
     res_seg = supabase.table("pss_pnr_segments").select("segment_id, flight_id, seat_id, cabin_class").eq("pnr_id", pnr_id).execute()
     if not res_seg.data:
         raise ValueError("Booking segment not found")
-    seg = res_seg.data[0]
-    flight_id = seg["flight_id"]
-    old_seat_id = seg["seat_id"]
-    cabin_class = seg.get("cabin_class") or "economy"
-    
+
+    seg_to_update = None
+    matching_segs = res_seg.data
+    if flight_uuid:
+        matching_segs = [s for s in matching_segs if s["flight_id"] == flight_uuid]
+
+    for s in matching_segs:
+        s_id = s.get("seat_id")
+        if s_id:
+            res_seat = supabase.table("pss_seat_map").select("passenger_id").eq("seat_id", s_id).execute()
+            if res_seat.data and res_seat.data[0].get("passenger_id") == pax_uuid:
+                seg_to_update = s
+                break
+
+    if not seg_to_update and matching_segs:
+        seg_to_update = matching_segs[0]
+
+    if not seg_to_update:
+        raise ValueError("Booking segment not found for this passenger and flight")
+
+    flight_id_to_use = seg_to_update["flight_id"]
+    old_seat_id = seg_to_update["seat_id"]
+    cabin_class = seg_to_update.get("cabin_class") or "economy"
+
     if seat_number.lower() in ("system-assigned", "auto", "any", "system_assigned"):
         res_avail = supabase.table("pss_seat_map").select("seat_id, seat_number, is_occupied")\
-            .eq("flight_id", flight_id)\
+            .eq("flight_id", flight_id_to_use)\
             .eq("is_occupied", False)\
             .eq("cabin_class", cabin_class)\
             .order("seat_number").execute()
             
         if not res_avail.data:
             res_avail = supabase.table("pss_seat_map").select("seat_id, seat_number, is_occupied")\
-                .eq("flight_id", flight_id)\
+                .eq("flight_id", flight_id_to_use)\
                 .eq("is_occupied", False)\
                 .order("seat_number").execute()
                 
         if not res_avail.data:
-            generate_seats_for_flight(flight_id)
+            generate_seats_for_flight(flight_id_to_use)
             res_avail = supabase.table("pss_seat_map").select("seat_id, seat_number, is_occupied")\
-                .eq("flight_id", flight_id)\
+                .eq("flight_id", flight_id_to_use)\
                 .eq("is_occupied", False)\
                 .eq("cabin_class", cabin_class)\
                 .order("seat_number").execute()
                 
             if not res_avail.data:
                 res_avail = supabase.table("pss_seat_map").select("seat_id, seat_number, is_occupied")\
-                    .eq("flight_id", flight_id)\
+                    .eq("flight_id", flight_id_to_use)\
                     .eq("is_occupied", False)\
                     .order("seat_number").execute()
                     
@@ -522,10 +836,10 @@ def select_seat(pnr: str, passenger_id: str, seat_number: str) -> dict:
         new_seat = res_avail.data[0]
         seat_number = new_seat["seat_number"]
     else:
-        res_seat = supabase.table("pss_seat_map").select("seat_id, is_occupied").eq("flight_id", flight_id).eq("seat_number", seat_number.upper()).execute()
+        res_seat = supabase.table("pss_seat_map").select("seat_id, is_occupied").eq("flight_id", flight_id_to_use).eq("seat_number", seat_number.upper()).execute()
         if not res_seat.data:
-            generate_seats_for_flight(flight_id)
-            res_seat = supabase.table("pss_seat_map").select("seat_id, is_occupied").eq("flight_id", flight_id).eq("seat_number", seat_number.upper()).execute()
+            generate_seats_for_flight(flight_id_to_use)
+            res_seat = supabase.table("pss_seat_map").select("seat_id, is_occupied").eq("flight_id", flight_id_to_use).eq("seat_number", seat_number.upper()).execute()
             if not res_seat.data:
                 raise ValueError(f"Seat {seat_number} not found for this flight")
         new_seat = res_seat.data[0]
@@ -541,11 +855,11 @@ def select_seat(pnr: str, passenger_id: str, seat_number: str) -> dict:
         
     supabase.table("pss_seat_map").update({
         "is_occupied": True,
-        "passenger_id": res_pnr.data[0]["primary_passenger_id"],
+        "passenger_id": pax_uuid,
         "pnr_id": pnr_id
     }).eq("seat_id", new_seat["seat_id"]).execute()
     
-    supabase.table("pss_pnr_segments").update({"seat_id": new_seat["seat_id"]}).eq("segment_id", seg["segment_id"]).execute()
+    supabase.table("pss_pnr_segments").update({"seat_id": new_seat["seat_id"]}).eq("segment_id", seg_to_update["segment_id"]).execute()
     return {"status": "success", "message": f"Seat {seat_number} successfully selected for PNR {pnr}", "seat_number": seat_number}
 
 def process_payment(pnr: str, amount: float, method: str, idempotency_key: str) -> dict:
@@ -555,10 +869,16 @@ def process_payment(pnr: str, amount: float, method: str, idempotency_key: str) 
         raise ValueError("Booking not found")
     pnr_id = res_pnr.data[0]["pnr_id"]
     
+    method_val = (method or "card").lower()
+    if method_val in ('credit_card', 'cc', 'debit_card', 'card'):
+        method_val = 'card'
+    elif method_val not in ('card','wallet','bank_transfer','voucher','miles'):
+        method_val = 'card'
+        
     payment_data = {
         "pnr_id": pnr_id,
         "amount_usd": amount,
-        "payment_method": method,
+        "payment_method": method_val,
         "idempotency_key": idempotency_key,
         "status": "captured",
         "three_ds_status": "authenticated",
@@ -582,62 +902,99 @@ def issue_ticket(pnr: str, passenger_id: str) -> dict:
         raise ValueError("PNR not found")
     pnr_id = res_pnr.data[0]["pnr_id"]
     
-    is_uuid = False
-    try:
-        uuid.UUID(passenger_id)
-        is_uuid = True
-    except ValueError:
-        pass
-        
-    query = supabase.table("pss_passengers").select("passenger_id")
-    if is_uuid:
-        res_pax = query.or_(f"passenger_id.eq.{passenger_id},legacy_id.eq.{passenger_id}").execute()
-    else:
-        res_pax = query.eq("legacy_id", passenger_id).execute()
-        
-    if not res_pax.data:
-        raise ValueError("Passenger not found")
-    pax_uuid = res_pax.data[0]["passenger_id"]
-    
+    # Check payment
     res_pay = supabase.table("pss_payments").select("payment_id").eq("pnr_id", pnr_id).eq("status", "captured").execute()
     if not res_pay.data:
         raise ValueError("Cannot issue ticket. Payment has not been captured.")
-        
-    res_seg = supabase.table("pss_pnr_segments").select("segment_id, flight_id, booking_class, cabin_class, base_fare_usd, taxes_usd").eq("pnr_id", pnr_id).execute()
+
+    # Get all passengers in this PNR
+    res_pax = supabase.table("pss_pnr_passengers").select("passenger_id").eq("pnr_id", pnr_id).execute()
+    pax_uuids = [p["passenger_id"] for p in res_pax.data]
+    
+    # If a specific passenger_id is requested (and it's not 'all'), filter to that one
+    if passenger_id and passenger_id != "all":
+        is_uuid = False
+        try:
+            uuid.UUID(passenger_id)
+            is_uuid = True
+        except ValueError:
+            pass
+            
+        query = supabase.table("pss_passengers").select("passenger_id")
+        if is_uuid:
+            res_target_pax = query.or_(f"passenger_id.eq.{passenger_id},legacy_id.eq.{passenger_id}").execute()
+        else:
+            res_target_pax = query.eq("legacy_id", passenger_id).execute()
+            
+        if res_target_pax.data:
+            pax_uuids = [res_target_pax.data[0]["passenger_id"]]
+
+    res_seg = supabase.table("pss_pnr_segments").select("segment_id, flight_id, booking_class, cabin_class, base_fare_usd, taxes_usd, seat_id").eq("pnr_id", pnr_id).execute()
     if not res_seg.data:
         raise ValueError("Booking segments not found")
-    seg = res_seg.data[0]
-    
-    tkt_num = f"016{uuid.uuid4().hex[:10].upper()}"
+
     res_airline = supabase.table("pss_airlines").select("airline_id").limit(1).execute()
     airline_id = res_airline.data[0]["airline_id"] if res_airline.data else None
-    
-    ticket_data = {
-        "pnr_id": pnr_id,
-        "passenger_id": pax_uuid,
-        "ticket_number": tkt_num,
-        "issuing_airline_id": airline_id,
-        "ticket_status": "open",
-        "fare_basis_code": f"TKT-{seg['booking_class']}",
-        "total_fare_usd": seg["base_fare_usd"],
-        "total_taxes_usd": seg["taxes_usd"]
-    }
-    res_tkt = supabase.table("pss_tickets").insert(ticket_data).execute()
-    tkt_id = res_tkt.data[0]["ticket_id"]
-    
-    coupon_data = {
-        "ticket_id": tkt_id,
-        "segment_id": seg["segment_id"],
-        "coupon_number": 1,
-        "coupon_status": "open"
-    }
-    supabase.table("pss_coupons").insert(coupon_data).execute()
+
+    issued_ticket_numbers = []
+
+    for pax_uuid in pax_uuids:
+        # Find segments for this passenger (via seat_map)
+        pax_segs = []
+        for s in res_seg.data:
+            seat_id = s.get("seat_id")
+            if seat_id:
+                res_seat = supabase.table("pss_seat_map").select("passenger_id").eq("seat_id", seat_id).execute()
+                if res_seat.data and res_seat.data[0].get("passenger_id") == pax_uuid:
+                    pax_segs.append(s)
+        
+        # Fallback to all segments if no specific seat mapping is found
+        if not pax_segs:
+            pax_segs = res_seg.data
+
+        # Check if ticket already exists
+        res_tkt_exist = supabase.table("pss_tickets").select("ticket_id, ticket_number").eq("pnr_id", pnr_id).eq("passenger_id", pax_uuid).execute()
+        if res_tkt_exist.data:
+            tkt_num = res_tkt_exist.data[0]["ticket_number"]
+            tkt_id = res_tkt_exist.data[0]["ticket_id"]
+        else:
+            tkt_num = f"016{uuid.uuid4().hex[:10].upper()}"
+            pax_base_fare = sum(float(s["base_fare_usd"]) for s in pax_segs)
+            pax_taxes = sum(float(s["taxes_usd"]) for s in pax_segs)
+            
+            ticket_data = {
+                "pnr_id": pnr_id,
+                "passenger_id": pax_uuid,
+                "ticket_number": tkt_num,
+                "issuing_airline_id": airline_id,
+                "ticket_status": "open",
+                "fare_basis_code": f"TKT-{pax_segs[0]['booking_class']}" if pax_segs else "TKT-Y",
+                "total_fare_usd": pax_base_fare,
+                "total_taxes_usd": pax_taxes
+            }
+            res_tkt = supabase.table("pss_tickets").insert(ticket_data).execute()
+            tkt_id = res_tkt.data[0]["ticket_id"]
+
+        # Ensure coupons exist
+        for idx, s in enumerate(pax_segs):
+            res_cp_exist = supabase.table("pss_coupons").select("coupon_id").eq("ticket_id", tkt_id).eq("segment_id", s["segment_id"]).execute()
+            if not res_cp_exist.data:
+                coupon_data = {
+                    "ticket_id": tkt_id,
+                    "segment_id": s["segment_id"],
+                    "coupon_number": idx + 1,
+                    "coupon_status": "open"
+                }
+                supabase.table("pss_coupons").insert(coupon_data).execute()
+
+            issued_ticket_numbers.append(tkt_num)
+
     supabase.table("pss_pnrs").update({"status": "ticketed"}).eq("pnr_id", pnr_id).execute()
-    
+
     return {
         "status": "success",
-        "message": f"Ticket {tkt_num} issued successfully",
-        "ticket_number": tkt_num
+        "message": f"Tickets issued successfully for passengers: {', '.join(issued_ticket_numbers)}",
+        "ticket_number": issued_ticket_numbers[0] if issued_ticket_numbers else "N/A"
     }
 
 def check_in(pnr: str) -> dict:

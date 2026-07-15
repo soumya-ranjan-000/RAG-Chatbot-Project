@@ -9,7 +9,6 @@ import {
   CopyOutlined,
   CheckOutlined,
   CodeOutlined,
-  ConsoleSqlOutlined,
   DatabaseOutlined,
   InfoCircleOutlined,
 } from "@ant-design/icons";

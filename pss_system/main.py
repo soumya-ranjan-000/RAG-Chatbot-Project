@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import db
+from typing import Optional, List
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pss-api")
@@ -25,6 +26,9 @@ class BookRequest(BaseModel):
     date: str
     status: str = "booked"
     booking_class: str = "Y"
+    passengers: Optional[List[dict]] = None
+    return_date: Optional[str] = None
+    return_booking_class: Optional[str] = None
 
 class RescheduleRequest(BaseModel):
     new_date: str
@@ -36,6 +40,8 @@ class StatusRequest(BaseModel):
 class SeatSelectRequest(BaseModel):
     passenger_id: str
     seat_number: str
+    flight_id: Optional[str] = None
+    flight_number: Optional[str] = None
 
 class PaymentRequest(BaseModel):
     amount: float
@@ -81,7 +87,17 @@ def read_booking(pnr: str):
 @app.post("/api/pss/bookings")
 def make_booking(req: BookRequest):
     try:
-        return db.create_booking(req.passenger_id, req.origin, req.destination, req.date, req.status, req.booking_class)
+        return db.create_booking(
+            req.passenger_id, 
+            req.origin, 
+            req.destination, 
+            req.date, 
+            req.status, 
+            req.booking_class,
+            passengers=req.passengers,
+            return_date=req.return_date,
+            return_booking_class=req.return_booking_class
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -99,8 +115,8 @@ def update_booking(pnr: str, req: RescheduleRequest):
         raise HTTPException(status_code=404, detail=str(e))
 
 @app.get("/api/pss/flights")
-def list_flights(origin: str = None, destination: str = None, date: str = None):
-    return db.get_flights(origin, destination, date)
+def list_flights(origin: str = None, destination: str = None, date: str = None, time_range: str = None):
+    return db.get_flights(origin, destination, date, time_range)
 
 @app.post("/api/pss/bookings/{pnr}/status")
 def update_booking_status(pnr: str, req: StatusRequest):
@@ -122,7 +138,7 @@ def get_flight_seats(flight_id: str):
 @app.post("/api/pss/bookings/{pnr}/seat")
 def select_booking_seat(pnr: str, req: SeatSelectRequest):
     try:
-        return db.select_seat(pnr, req.passenger_id, req.seat_number)
+        return db.select_seat(pnr, req.passenger_id, req.seat_number, flight_id=req.flight_id or req.flight_number)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
