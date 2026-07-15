@@ -9,3 +9,5 @@ langchain-community
 numpy
 python-dotenv
 python-multipart
+langchain
+langsmith

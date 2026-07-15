@@ -31,10 +31,13 @@ export const IngestionProgress = ({
 
   const streamUrl = jobId ? `${import.meta.env.VITE_API_URL}/ingest/stream/${jobId}` : null;
 
-  useSSE(streamUrl, {
+  const { close } = useSSE(streamUrl, {
     onMessage: (data) => {
       setProgress(data);
       onStreamUpdate?.(data);
+      if (data.status === "completed" || data.status === "failed") {
+        close();
+      }
     },
     onError: (error) => {
       console.error("Stream error:", error);
@@ -59,15 +62,36 @@ export const IngestionProgress = ({
     );
   }
 
-  const progressPercent = Math.round(
-    (progress.processed_files / progress.total_files) * 100
-  );
+  const stage = (progress as any).stage;
+  const totalVectors = (progress as any).total_vectors || 0;
+  const uploadedVectors = (progress as any).uploaded_vectors || 0;
+
+  let progressPercent = 0;
+  if (progress.status === "completed") {
+    progressPercent = 100;
+  } else if (progress.status === "failed") {
+    progressPercent = 100;
+  } else {
+    if (stage === "uploading" && totalVectors > 0) {
+      progressPercent = Math.round((uploadedVectors / totalVectors) * 100);
+    } else if (stage === "embedding") {
+      progressPercent = 40;
+    } else if (stage === "chunking") {
+      progressPercent = 20;
+    } else if (stage === "downloading") {
+      progressPercent = 10;
+    } else {
+      progressPercent = Math.round(
+        (progress.processed_files / progress.total_files) * 100
+      );
+    }
+  }
 
   const config = statusConfig[progress.status];
 
   return (
     <div style={{ padding: "24px" }}>
-      <h2 style={{ marginBottom: "20px" }}>Ingestion Progress</h2>
+      <h2 style={{ marginBottom: "20px", color: "#000" }}>Ingestion Progress</h2>
 
       <Card style={{ marginBottom: "16px" }}>
         <Space direction="vertical" style={{ width: "100%" }} size="large">
@@ -82,7 +106,7 @@ export const IngestionProgress = ({
             <Progress percent={progressPercent} />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "16px" }}>
             <Statistic
               title="Total Files"
               value={progress.total_files}
@@ -95,6 +119,14 @@ export const IngestionProgress = ({
                 color: progress.status === "completed" ? "#52c41a" : "#1890ff",
               }}
             />
+            {totalVectors > 0 && (
+              <Statistic
+                title={stage === "embedding" ? "Total Chunks" : "Vectors Uploaded"}
+                value={stage === "embedding" ? totalVectors : uploadedVectors}
+                suffix={`/ ${totalVectors}`}
+                valueStyle={{ color: "#722ed1" }}
+              />
+            )}
             <Statistic
               title="Progress"
               value={progressPercent}

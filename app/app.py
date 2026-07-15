@@ -7,8 +7,9 @@ import uuid
 import asyncio
 import json
 import logging
-from ingestion import process_s3_document, upload_file_to_s3
+from ingestion import process_s3_document, upload_file_to_s3, list_files_in_s3, delete_file_from_s3, get_indexed_documents
 from retrieval import search_vector_chunks
+from chat import stream_chat_response
 from typing import Dict, List, Callable, Optional, Union
 
 # Setup logging
@@ -124,6 +125,41 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/files")
+async def get_files(bucket_name: Optional[str] = None):
+    """List files in the S3 bucket with their indexing status."""
+    logger.info("Received GET /files request")
+    try:
+        s3_files = list_files_in_s3(bucket_name)
+        indexed_docs = get_indexed_documents()
+        
+        files_list = []
+        for f in s3_files:
+            files_list.append({
+                "key": f["key"],
+                "size": f["size"],
+                "last_modified": f["last_modified"],
+                "s3_uri": f["s3_uri"],
+                "indexed": f["key"] in indexed_docs
+            })
+        return files_list
+    except Exception as e:
+        logger.error(f"Failed to list files: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list files: {str(e)}")
+
+
+@app.delete("/files")
+async def delete_file(key: str = Query(..., description="The S3 key/filename to delete"), bucket_name: Optional[str] = None):
+    """Delete a file from S3 and its corresponding chunks from Supabase."""
+    logger.info(f"Received DELETE request for file: {key}")
+    try:
+        delete_file_from_s3(key, bucket_name)
+        return {"message": f"Successfully deleted {key} from S3 and Supabase"}
+    except Exception as e:
+        logger.error(f"Failed to delete file {key}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 
 @app.get("/query")
@@ -277,3 +313,43 @@ async def stream_progress(job_id: str):
             elapsed += 0.5
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# --- Chat Endpoint ---
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    query: str
+    history: List[ChatMessage] = []
+    top_k: Optional[int] = 5
+    threshold: Optional[float] = 0.3
+    passenger_id: Optional[str] = "usr_94f83b"
+
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    """
+    Stream a chat response with document sources.
+    """
+    logger.info(f"Received /chat query: '{request.query}' with {len(request.history)} history messages for passenger {request.passenger_id}")
+    
+    history_list = [msg.model_dump() for msg in request.history]
+    
+    return StreamingResponse(
+        stream_chat_response(
+            query=request.query,
+            history=history_list,
+            top_k=request.top_k or 5,
+            threshold=request.threshold or 0.3,
+            passenger_id=request.passenger_id or "usr_94f83b"
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+

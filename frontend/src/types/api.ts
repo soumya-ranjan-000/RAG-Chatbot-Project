@@ -77,3 +77,12 @@ export interface SearchHistoryEntry {
 
 // Export data type
 export type ExportFormat = "csv" | "json";
+
+// S3 file information
+export interface S3File {
+  key: string;
+  size: number;
+  last_modified: string;
+  s3_uri: string;
+  indexed: boolean;
+}

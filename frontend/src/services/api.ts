@@ -5,6 +5,7 @@ import type {
   IngestionRequest,
   IngestionResponse,
   JobProgress,
+  S3File,
 } from "../types/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -103,6 +104,24 @@ export const apiService = {
     };
 
     return eventSource;
+  },
+
+  /**
+   * List files in S3 bucket
+   */
+  async listFiles(): Promise<S3File[]> {
+    const response = await client.get<S3File[]>("/files");
+    return response.data;
+  },
+
+  /**
+   * Delete a file from S3 and its chunks
+   */
+  async deleteFile(key: string): Promise<any> {
+    const response = await client.delete("/files", {
+      params: { key },
+    });
+    return response.data;
   },
 };
 

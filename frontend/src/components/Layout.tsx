@@ -1,34 +1,94 @@
-import { Layout, Menu, Drawer, Button } from "antd";
-import { MenuFoldOutlined } from "@ant-design/icons";
+import { Layout, Menu, Drawer, Avatar, Dropdown } from "antd";
+import { UserOutlined, LogoutOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 interface AppLayoutProps {
   children: React.ReactNode;
+  currentUser: {
+    username: string;
+    role: "admin" | "passenger";
+    passengerProfile?: {
+      passenger_id: string;
+      name: string;
+      email: string;
+      frequent_flyer_number: string;
+    };
+  };
+  onLogout: () => void;
 }
 
-export const AppLayout = ({ children }: AppLayoutProps) => {
+export const AppLayout = ({ children, currentUser, onLogout }: AppLayoutProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
 
   const menuItems = [
     {
-      key: "ingestion",
-      label: <Link to="/?tab=ingestion">Upload & Ingest</Link>,
+      key: "chat",
+      label: <Link to="/?tab=chat">AI Chatbot</Link>,
     },
     {
-      key: "retrieval",
-      label: <Link to="/?tab=retrieval">Search & Retrieve</Link>,
+      key: "booking",
+      label: <Link to="/?tab=booking">Flight Booking Portal</Link>,
     },
     {
-      key: "history",
-      label: <Link to="/?tab=history">Search History</Link>,
+      key: "profile",
+      label: <Link to="/?tab=profile">My Bookings & Profile</Link>,
     },
+    ...(currentUser.role === "admin"
+      ? [
+          {
+            key: "ingestion",
+            label: <Link to="/?tab=ingestion">Upload & Ingest</Link>,
+          },
+          {
+            key: "retrieval",
+            label: <Link to="/?tab=retrieval">Search & Retrieve</Link>,
+          },
+          {
+            key: "history",
+            label: <Link to="/?tab=history">Search History</Link>,
+          },
+        ]
+      : []),
   ];
 
   const getSelectedKey = () => {
     const params = new URLSearchParams(location.search);
-    return params.get("tab") || "ingestion";
+    return params.get("tab") || "chat";
+  };
+
+  const profileMenu = {
+    items: [
+      {
+        key: "info",
+        label: (
+          <div style={{ padding: "4px 12px" }}>
+            <div style={{ fontWeight: "bold", fontSize: "14px" }}>
+              {currentUser.passengerProfile?.name || "Administrator"}
+            </div>
+            <div style={{ color: "#8c8c8c", fontSize: "12px" }}>
+              {currentUser.username}
+            </div>
+            {currentUser.passengerProfile?.frequent_flyer_number && (
+              <div style={{ marginTop: "4px", fontSize: "11px" }}>
+                FF: <span style={{ color: "#fa8c16", fontWeight: "bold" }}>{currentUser.passengerProfile.frequent_flyer_number}</span>
+              </div>
+            )}
+          </div>
+        ),
+      },
+      {
+        type: "divider" as const,
+      },
+      {
+        key: "logout",
+        icon: <LogoutOutlined />,
+        label: "Log Out",
+        onClick: onLogout,
+        danger: true,
+      },
+    ],
   };
 
   return (
@@ -43,6 +103,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
           alignItems: "center",
           justifyContent: "space-between",
           borderBottom: "1px solid #f0f0f0",
+          zIndex: 10
         }}
       >
         <div
@@ -50,25 +111,39 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
             fontSize: "20px",
             fontWeight: "bold",
             color: "#1890ff",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
           }}
         >
-          RAG Chatbot Dashboard
+          <span>✈️</span> Apex Flight Dashboard
         </div>
 
-        {/* Desktop Menu Button */}
-        {/* Mobile Menu Button */}
-        <div
-          style={{
-            display: "none",
-          }}
-          className="mobile-menu-btn"
-        >
-          <Button
-            type="text"
-            icon={<MenuFoldOutlined />}
-            onClick={() => setDrawerOpen(true)}
-          />
-        </div>
+        {/* Profile / Logged-in passenger details in the header */}
+        <Dropdown menu={profileMenu} trigger={["click"]} placement="bottomRight">
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "8px", 
+            cursor: "pointer", 
+            padding: "4px 12px", 
+            borderRadius: "6px", 
+            transition: "background 0.3s" 
+          }}>
+            <Avatar 
+              icon={<UserOutlined />} 
+              style={{ backgroundColor: currentUser.role === "admin" ? "#f56a00" : "#1890ff" }} 
+            />
+            <div style={{ textAlign: "left", lineHeight: "1.2" }}>
+              <div style={{ fontWeight: "bold", fontSize: "13px" }}>
+                {currentUser.passengerProfile?.name || "Admin"}
+              </div>
+              <div style={{ fontSize: "11px", color: "#8c8c8c" }}>
+                {currentUser.role === "admin" ? "System Admin" : "Passenger"}
+              </div>
+            </div>
+          </div>
+        </Dropdown>
       </Layout.Header>
 
       <Layout style={{ flex: 1 }}>

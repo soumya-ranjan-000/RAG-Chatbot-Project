@@ -54,6 +54,57 @@ def upload_file_to_s3(file_content: bytes, file_name: str, bucket_name: str = No
         logger.error(f"Failed to upload {file_name} to S3: {e}", exc_info=True)
         raise e
 
+def list_files_in_s3(bucket_name: str = None):
+    """List all objects in the S3 bucket."""
+    target_bucket = bucket_name or S3_BUCKET
+    logger.info(f"Listing files in S3 bucket: {target_bucket}")
+    
+    try:
+        response = s3_client.list_objects_v2(Bucket=target_bucket)
+        files = []
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                files.append({
+                    "key": obj["Key"],
+                    "size": obj["Size"],
+                    "last_modified": obj["LastModified"].isoformat(),
+                    "s3_uri": f"s3://{target_bucket}/{obj['Key']}"
+                })
+        return files
+    except Exception as e:
+        logger.error(f"Failed to list files in S3: {e}", exc_info=True)
+        raise e
+
+def delete_file_from_s3(file_key: str, bucket_name: str = None):
+    """Delete an object from S3 and its corresponding chunks from Supabase."""
+    target_bucket = bucket_name or S3_BUCKET
+    logger.info(f"Deleting file {file_key} from bucket {target_bucket} and database...")
+    
+    try:
+        # 1. Delete from S3
+        s3_client.delete_object(Bucket=target_bucket, Key=file_key)
+        logger.info(f"Deleted {file_key} from S3 bucket {target_bucket}")
+        
+        # 2. Delete chunks from Supabase
+        supabase.table("document_chunks").delete().eq("document_name", file_key).execute()
+        logger.info(f"Deleted chunks for {file_key} from Supabase")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete {file_key}: {e}", exc_info=True)
+        raise e
+
+def get_indexed_documents():
+    """Get a list of unique document names from Supabase."""
+    try:
+        response = supabase.table("document_chunks").select("document_name").execute()
+        if response.data:
+            return list(set(row["document_name"] for row in response.data if "document_name" in row))
+        return []
+    except Exception as e:
+        logger.error(f"Failed to fetch indexed documents from Supabase: {e}", exc_info=True)
+        return []
+
 # --- REPLACED OpenAI WITH SentenceTransformer ---
 # Note: all-MiniLM-L6-v2 produces 384-dimensional vectors.
 # Ensure your Supabase column is set to vector(384) instead of vector(1536).
@@ -204,17 +255,18 @@ def process_s3_document(s3_key: str, bucket_name: str = None, progress_callback=
 
         # 5. Chunking
         logger.info(f"Splitting document into chunks...")
-        report("Chunking document", {"current_file": s3_key})
+        report("Chunking document", {"current_file": s3_key, "stage": "chunking"})
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000, chunk_overlap=150, separators=["\n\n", "\n", " ", ""]
         )
         chunks = text_splitter.split_documents(documents)
         logger.info(f"Created {len(chunks)} chunks")
 
-        report("Converting to vectors", {"current_file": s3_key})
+        total_chunks = len(chunks)
+        report(f"Generating embeddings (0/{total_chunks})...", {"current_file": s3_key, "stage": "embedding", "total_vectors": total_chunks, "uploaded_vectors": 0})
         records_to_insert = []
         
-        logger.info(f"Generating embeddings for {len(chunks)} chunks...")
+        logger.info(f"Generating embeddings for {total_chunks} chunks...")
         for i, chunk in enumerate(chunks):
             clean_content = chunk.page_content
             if not clean_content:
@@ -238,19 +290,40 @@ def process_s3_document(s3_key: str, bucket_name: str = None, progress_callback=
                     "embedding": embedding_vector,
                 }
             )
+            
+            if (i + 1) % 10 == 0 or i == total_chunks - 1:
+                report(f"Generating embeddings ({i+1}/{total_chunks})...", {"current_file": s3_key, "stage": "embedding"})
 
         # 6. Supabase Upload
-        logger.info(f"Uploading {len(records_to_insert)} vectors to Supabase...")
-        report("Uploading to Supabase", {"current_file": s3_key})
+        total_vectors = len(records_to_insert)
+        logger.info(f"Uploading {total_vectors} vectors to Supabase...")
+        report(
+            "Embedding completed, now uploading embedding to database...",
+            {
+                "current_file": s3_key,
+                "stage": "uploading",
+                "total_vectors": total_vectors,
+                "uploaded_vectors": 0
+            }
+        )
         
         if records_to_insert:
             batch_size = 50
-            for i in range(0, len(records_to_insert), batch_size):
+            for i in range(0, total_vectors, batch_size):
                 batch = records_to_insert[i : i + batch_size]
                 supabase.table("document_chunks").insert(batch).execute()
                 logger.info(f"Uploaded batch {i//batch_size + 1}")
+                uploaded_count = min(i + batch_size, total_vectors)
+                report(
+                    f"Uploading vectors: {uploaded_count}/{total_vectors} (Batch {i//batch_size + 1})",
+                    {
+                        "current_file": s3_key,
+                        "stage": "uploading",
+                        "uploaded_vectors": uploaded_count
+                    }
+                )
             
-            report("Upload complete", {"current_file": s3_key})
+            report("Upload complete", {"current_file": s3_key, "stage": "completed"})
             logger.info(f"✅ SUCCESSFULLY INGESTED: {s3_key}")
 
     except Exception as e:

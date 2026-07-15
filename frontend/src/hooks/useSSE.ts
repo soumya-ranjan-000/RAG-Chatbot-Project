@@ -9,7 +9,16 @@ interface UseSSEOptions {
 
 export const useSSE = (url: string | null, options: UseSSEOptions = {}) => {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const { onMessage, onError, onOpen } = options;
+  const onMessageRef = useRef(options.onMessage);
+  const onErrorRef = useRef(options.onError);
+  const onOpenRef = useRef(options.onOpen);
+
+  // Keep refs up-to-date with latest callbacks
+  useEffect(() => {
+    onMessageRef.current = options.onMessage;
+    onErrorRef.current = options.onError;
+    onOpenRef.current = options.onOpen;
+  }, [options.onMessage, options.onError, options.onOpen]);
 
   const close = useCallback(() => {
     if (eventSourceRef.current) {
@@ -25,20 +34,20 @@ export const useSSE = (url: string | null, options: UseSSEOptions = {}) => {
       const eventSource = new EventSource(url);
 
       eventSource.onopen = () => {
-        onOpen?.();
+        onOpenRef.current?.();
       };
 
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          onMessage?.(data);
+          onMessageRef.current?.(data);
         } catch (error) {
-          onError?.(new Error("Failed to parse SSE message"));
+          onErrorRef.current?.(new Error("Failed to parse SSE message"));
         }
       };
 
       eventSource.onerror = () => {
-        onError?.(new Error("SSE connection error"));
+        onErrorRef.current?.(new Error("SSE connection error"));
         eventSource.close();
       };
 
@@ -48,9 +57,9 @@ export const useSSE = (url: string | null, options: UseSSEOptions = {}) => {
         eventSource.close();
       };
     } catch (error) {
-      onError?.(error instanceof Error ? error : new Error("SSE error"));
+      onErrorRef.current?.(error instanceof Error ? error : new Error("SSE error"));
     }
-  }, [url, onMessage, onError, onOpen]);
+  }, [url]);
 
   return { close };
 };
