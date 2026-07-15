@@ -1,5 +1,5 @@
-import { Layout, Menu, Drawer, Avatar, Dropdown } from "antd";
-import { UserOutlined, LogoutOutlined } from "@ant-design/icons";
+import { Layout, Menu, Drawer, Avatar, Dropdown, Button, Tooltip } from "antd";
+import { UserOutlined, LogoutOutlined, CodeOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -97,7 +97,9 @@ export const AppLayout = ({ children, currentUser, onLogout }: AppLayoutProps) =
       <Layout.Header
         style={{
           background: "#fff",
-          padding: "0 24px",
+          padding: "0 20px",
+          height: "52px",
+          lineHeight: "52px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
           display: "flex",
           alignItems: "center",
@@ -118,6 +120,31 @@ export const AppLayout = ({ children, currentUser, onLogout }: AppLayoutProps) =
         >
           <span>✈️</span> Apex Flight Dashboard
         </div>
+
+        {/* Agent Log Terminal Button */}
+        <Tooltip title="Open Agent Execution Log" placement="bottom">
+          <Button
+            icon={<CodeOutlined />}
+            onClick={() => window.open("/agent-log", "agent_log", "width=820,height=640,resizable=yes,scrollbars=yes")}
+            style={{
+              background: "#090d16",
+              border: "1px solid #334155",
+              color: "#38bdf8",
+              borderRadius: "6px",
+              fontFamily: "'Fira Code', monospace",
+              fontSize: "12px",
+              fontWeight: "bold",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              height: "34px",
+              padding: "0 12px"
+            }}
+          >
+            <span style={{ fontSize: "10px", color: "#64748b" }}>agent-executor</span>
+            <span style={{ color: "#27c93f", animation: "pulse 2s infinite" }}>●</span>
+          </Button>
+        </Tooltip>
 
         {/* Profile / Logged-in passenger details in the header */}
         <Dropdown menu={profileMenu} trigger={["click"]} placement="bottomRight">
@@ -149,7 +176,7 @@ export const AppLayout = ({ children, currentUser, onLogout }: AppLayoutProps) =
       <Layout style={{ flex: 1 }}>
         {/* Desktop Sidebar */}
         <Layout.Sider
-          width={200}
+          width={160}
           style={{
             background: "#fff",
             borderRight: "1px solid #f0f0f0",
@@ -189,14 +216,12 @@ export const AppLayout = ({ children, currentUser, onLogout }: AppLayoutProps) =
           style={{
             background: "#fafafa",
             minHeight: 0,
-            overflow: "auto",
+            overflow: "hidden",
             display: "flex",
             flexDirection: "column",
           }}
         >
-          <div style={{ padding: "24px", flex: 1 }}>
-            {children}
-          </div>
+          {children}
         </Layout.Content>
       </Layout>
     </Layout>

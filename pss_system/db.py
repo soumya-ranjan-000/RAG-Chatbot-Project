@@ -19,7 +19,9 @@ try:
         add_ssr,
         get_loyalty_info,
         add_ancillary,
-        get_revenue_summary
+        get_revenue_summary,
+        upgrade_with_miles,
+        get_flight_status
     )
 except ImportError:
     from db_supabase import (
@@ -40,7 +42,9 @@ except ImportError:
         add_ssr,
         get_loyalty_info,
         add_ancillary,
-        get_revenue_summary
+        get_revenue_summary,
+        upgrade_with_miles,
+        get_flight_status
     )
 
 logger = logging.getLogger("pss-db-shim")

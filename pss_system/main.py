@@ -24,6 +24,7 @@ class BookRequest(BaseModel):
     destination: str
     date: str
     status: str = "booked"
+    booking_class: str = "Y"
 
 class RescheduleRequest(BaseModel):
     new_date: str
@@ -57,6 +58,10 @@ class AncillaryRequest(BaseModel):
     ancillary_type: str
     amount: float
 
+class UpgradeRequest(BaseModel):
+    passenger_id: str
+    required_miles: int
+
 # --- Existing Endpoints ---
 
 @app.get("/api/pss/passengers/{passenger_id}")
@@ -76,7 +81,7 @@ def read_booking(pnr: str):
 @app.post("/api/pss/bookings")
 def make_booking(req: BookRequest):
     try:
-        return db.create_booking(req.passenger_id, req.origin, req.destination, req.date, req.status)
+        return db.create_booking(req.passenger_id, req.origin, req.destination, req.date, req.status, req.booking_class)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -167,9 +172,23 @@ def add_booking_ancillary(pnr: str, req: AncillaryRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/api/pss/bookings/{pnr}/upgrade")
+def upgrade_booking_with_miles(pnr: str, req: UpgradeRequest):
+    try:
+        return db.upgrade_with_miles(pnr, req.passenger_id, req.required_miles)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/api/pss/flights/{flight_id}/revenue")
 def get_flight_revenue(flight_id: str):
     return db.get_revenue_summary(flight_id)
+
+@app.get("/api/pss/flights/{flight_number}/status")
+def get_flight_status_endpoint(flight_number: str, date: str = None):
+    try:
+        return db.get_flight_status(flight_number, date)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

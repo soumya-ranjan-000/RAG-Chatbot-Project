@@ -407,7 +407,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
-        padding: "16px"
+        padding: "12px"
       }}
     >
       {/* Messages Scroll Area */}
@@ -416,7 +416,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           flex: 1,
           overflowY: "auto",
           paddingRight: "4px",
-          marginBottom: "16px",
+          marginBottom: "10px",
           display: "flex",
           flexDirection: "column"
         }}

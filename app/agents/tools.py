@@ -35,9 +35,15 @@ def check_booking_status(pnr: str) -> dict:
         return {"error": f"Failed to connect to PSS: {e}"}
 
 @tool
-def book_flight(passenger_id: str, origin: str, destination: str, date: str) -> dict:
+def book_flight(passenger_id: str, origin: str, destination: str, date: str, booking_class: str = "Y") -> dict:
     """
     Creates a new flight booking for the given passenger from origin to destination on the specified date (YYYY-MM-DD).
+    Input parameters:
+      - passenger_id: Unique passenger identifier or legacy ID.
+      - origin: Three-letter departure airport code (e.g. BLR, JFK).
+      - destination: Three-letter arrival airport code (e.g. JFK, LAX).
+      - date: Departure date (YYYY-MM-DD).
+      - booking_class: Booking class letter (e.g., 'B' for Economy Light, 'Y' for Economy Flex, 'J' for Business Flex). Defaults to 'Y'.
     Returns the booking confirmation including the generated PNR code.
     """
     try:
@@ -46,7 +52,8 @@ def book_flight(passenger_id: str, origin: str, destination: str, date: str) -> 
             "origin": origin,
             "destination": destination,
             "date": date,
-            "status": "pending-payment"
+            "status": "pending-payment",
+            "booking_class": booking_class
         }
         response = httpx.post(f"{PSS_API_URL}/bookings", json=payload)
         if response.status_code == 200:
@@ -286,6 +293,47 @@ def add_ancillary_tool(pnr: str, passenger_id: str, ancillary_type: str, amount:
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to add ancillary.")}
+    except Exception as e:
+        return {"error": f"Failed to connect to PSS: {e}"}
+
+@tool
+def upgrade_with_miles_tool(pnr: str, passenger_id: str, required_miles: int) -> dict:
+    """
+    Upgrades a booking segment (PNR) to Business Class using the passenger's accumulated loyalty miles.
+    Parameters:
+      - pnr: The reservation code.
+      - passenger_id: The passenger's ID.
+      - required_miles: The number of loyalty miles required for the upgrade.
+    """
+    try:
+        payload = {
+            "passenger_id": passenger_id,
+            "required_miles": required_miles
+        }
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/upgrade", json=payload)
+        if response.status_code == 200:
+            return response.json()
+        return {"error": response.json().get("detail", "Failed to upgrade flight with miles.")}
+    except Exception as e:
+        return {"error": f"Failed to connect to PSS: {e}"}
+
+@tool
+def check_flight_status_tool(flight_number: str, date: str = None) -> dict:
+    """
+    Checks the real-time flight status (e.g. gates, delays, status like Scheduled, Delayed, Boarding, Departed) 
+    for a flight number (e.g. EK511).
+    Parameters:
+      - flight_number: The flight code/number (e.g. EK511).
+      - date: Optional departure date (YYYY-MM-DD). If omitted, retrieves the most recent or scheduled flight.
+    """
+    try:
+        params = {}
+        if date:
+            params["date"] = date
+        response = httpx.get(f"{PSS_API_URL}/flights/{flight_number}/status", params=params)
+        if response.status_code == 200:
+            return response.json()
+        return {"error": response.json().get("detail", "Failed to retrieve flight status.")}
     except Exception as e:
         return {"error": f"Failed to connect to PSS: {e}"}
 

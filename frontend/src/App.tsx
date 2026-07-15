@@ -4,6 +4,7 @@ import { AppLayout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
 import { Login } from "./components/Login";
 import { PaymentGatewayPage } from "./pages/PaymentGatewayPage";
+import { AgentLogPage } from "./pages/AgentLogPage";
 
 interface UserSession {
   username: string;
@@ -56,6 +57,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/payment" element={<PaymentGatewayPage />} />
+        <Route path="/agent-log" element={<AgentLogPage />} />
         <Route path="/*" element={
           <AppLayout currentUser={currentUser} onLogout={handleLogout}>
             <Dashboard currentUser={currentUser} />

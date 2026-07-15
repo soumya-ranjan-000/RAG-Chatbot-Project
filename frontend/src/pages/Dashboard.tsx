@@ -37,7 +37,26 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
   const [showChunkDetails, setShowChunkDetails] = useState(false);
   const [activeBooking, setActiveBooking] = useState<any>(null);
   const [bookings, setBookings] = useState<any[]>([]);
-  const [toolActivity, setToolActivity] = useState<any[]>([]);
+  // BroadcastChannel to send tool activity to the popup window
+  const broadcastActivity = (activity: any) => {
+    try {
+      const channel = new BroadcastChannel("agent_tool_activity");
+      channel.postMessage(activity);
+      channel.close();
+      // Also persist to localStorage for the popup to load history on open
+      const saved = localStorage.getItem("agent_tool_activity");
+      const prev: any[] = saved ? JSON.parse(saved) : [];
+      const filtered = prev.filter(
+        (x: any) => !(x.name === activity.name && x.status === "running")
+      );
+      localStorage.setItem(
+        "agent_tool_activity",
+        JSON.stringify([...filtered, activity])
+      );
+    } catch (e) {
+      // BroadcastChannel not supported or popup closed
+    }
+  };
   const [passengerProfile] = useState<any>(
     currentUser.passengerProfile || {
       passenger_id: "admin",
@@ -153,26 +172,21 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ display: "flex", gap: "20px", height: "calc(100vh - 170px)", padding: "20px" }}>
-          <div style={{ flex: "1 1 55%", minWidth: 0, height: "100%" }}>
+        <div style={{ display: "flex", gap: "12px", height: "calc(100vh - 114px)", padding: "12px 16px" }}>
+          <div style={{ flex: "1 1 58%", minWidth: 0, height: "100%", overflow: "hidden" }}>
             <ChatWindow 
               passengerProfile={passengerProfile}
               onBookingUpdate={handleBookingUpdate}
               onToolActivity={(activity) => {
-                setToolActivity(prev => {
-                  const filtered = prev.filter(x => !(x.name === activity.name && x.status === "running"));
-                  return [...filtered, activity];
-                });
+                broadcastActivity(activity);
               }}
             />
           </div>
-          <div style={{ flex: "0 0 45%", minWidth: "360px", maxWidth: "520px", height: "100%" }}>
+          <div style={{ flex: "0 0 380px", minWidth: "320px", maxWidth: "420px", height: "100%", overflow: "hidden" }}>
             <FlightPreviewPanel 
               activeBooking={activeBooking}
               bookings={bookings}
               onSelectBooking={setActiveBooking}
-              toolActivity={toolActivity}
-              onClearLogs={() => setToolActivity([])}
             />
           </div>
         </div>
@@ -186,7 +200,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "24px" }}>
+        <div style={{ padding: "16px 20px" }}>
           <BookingPortal 
             currentUser={currentUser} 
             onBookingCreated={(booking) => {
@@ -205,7 +219,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "24px" }}>
+        <div style={{ padding: "16px 20px" }}>
           <ProfilePanel 
             currentUser={currentUser} 
             bookings={bookings} 
@@ -223,7 +237,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "24px" }}>
+        <div style={{ padding: "16px 20px" }}>
           <UploadForm />
         </div>
       ),
@@ -236,7 +250,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "24px" }}>
+        <div style={{ padding: "16px 20px" }}>
           <SearchForm 
             onSearch={handleSearch}
             queryFn={query}
@@ -264,7 +278,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "24px" }}>
+        <div style={{ padding: "16px 20px" }}>
           <SearchHistory onSelectSearch={handleSearchAgain} />
         </div>
       ),

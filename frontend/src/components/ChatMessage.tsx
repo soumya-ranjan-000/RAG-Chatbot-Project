@@ -8,148 +8,611 @@ import { PSS_API_URL } from "../services/api";
 
 const { Text } = Typography;
 
-const FlightsCardList: React.FC<{ flights: any[]; onSelect?: (flightNumber: string, date: string) => void }> = ({ flights, onSelect }) => {
+const FlightsCardList: React.FC<{
+  flights: any[];
+  onSelect?: (flightNumber: string, date: string, bookingClass: string) => void;
+}> = ({ flights, onSelect }) => {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px", margin: "12px 0", width: "100%" }}>
-      {flights.map((flight, index) => (
-        <div key={index} style={{
-          background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
-          color: "#fff",
-          padding: "12px 16px",
-          borderRadius: "10px",
-          border: "1px solid #334155",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.15)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "6px"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontWeight: "bold", color: "#38bdf8", fontSize: "13px" }}>
-              ✈️ {flight.airline || "Apex Air"} ({flight.flight_number})
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px", margin: "12px 0", width: "100%" }}>
+      {flights.map((flight, index) => {
+        const fareOptions = flight.fares || [
+          { class: "Economy Flex", booking_class: "Y", price: flight.price || 300, benefits: "Refundable, changeable, 23kg bag" }
+        ];
+
+        return (
+          <div key={index} style={{
+            background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+            color: "#fff",
+            padding: "12px 14px",
+            borderRadius: "12px",
+            border: "1px solid #334155",
+            boxShadow: "0 6px 12px rgba(0,0,0,0.2)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontWeight: "bold", color: "#38bdf8", fontSize: "14px" }}>
+                ✈️ {flight.airline || "Apex Air"} ({flight.flight_number})
+              </span>
+              <span style={{ fontSize: "10px", color: "#94a3b8", background: "#334155", padding: "2px 8px", borderRadius: "12px" }}>
+                Scheduled
+              </span>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: "800" }}>{flight.origin}</div>
+                <div style={{ fontSize: "10px", color: "#64748b" }}>Origin</div>
+              </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 10px", position: "relative" }}>
+                <span style={{ fontSize: "14px", color: "#38bdf8", transform: "translateY(-4px)" }}>✈</span>
+                <div style={{ borderTop: "1.5px dashed #475569", width: "100%", marginTop: "-4px" }} />
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "18px", fontWeight: "800" }}>{flight.destination}</div>
+                <div style={{ fontSize: "10px", color: "#64748b" }}>Destination</div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#94a3b8", borderBottom: "1px solid #334155", paddingBottom: "8px" }}>
+              <span>Departure: <strong>{flight.departure_time || "N/A"}</strong></span>
+              <span>Date: <strong>{flight.date || "Anydate"}</strong></span>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+              <div style={{ fontSize: "10px", fontWeight: "bold", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Select Fare Family
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {fareOptions.map((fare: any, fIdx: number) => {
+                  const isBusiness = fare.class?.toLowerCase().includes("business");
+                  const isFlex = fare.class?.toLowerCase().includes("flex");
+                  const badgeColor = isBusiness ? "#a78bfa" : isFlex ? "#34d399" : "#38bdf8";
+
+                  return (
+                    <div
+                      key={fIdx}
+                      style={{
+                        background: "#0f172a",
+                        border: "1px solid #334155",
+                        borderRadius: "8px",
+                        padding: "8px 10px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", maxWidth: "70%" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: "bold", color: "#fff" }}>{fare.class}</span>
+                          <span style={{ fontSize: "9px", background: `${badgeColor}22`, color: badgeColor, border: `1px solid ${badgeColor}44`, padding: "1px 6px", borderRadius: "4px", fontWeight: "bold" }}>
+                            {fare.booking_class}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "9.5px", color: "#94a3b8" }}>{fare.benefits}</span>
+                      </div>
+                      
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                        <span style={{ fontSize: "14px", fontWeight: "bold", color: "#34d399" }}>${fare.price}</span>
+                        {onSelect && (
+                          <Button
+                            size="small"
+                            type="primary"
+                            style={{
+                              background: "transparent",
+                              border: "1px solid #38bdf8",
+                              color: "#38bdf8",
+                              borderRadius: "4px",
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                              height: "22px",
+                              lineHeight: "20px"
+                            }}
+                            onClick={() => onSelect(flight.flight_number, flight.date, fare.booking_class)}
+                          >
+                            Book
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const AncillaryOptionsCard: React.FC<{
+  ancillaries: any[];
+  onSelect?: (messageText: string) => void;
+}> = ({ ancillaries, onSelect }) => {
+  const [selected, setSelected] = useState<Record<number, boolean>>({});
+
+  const handleToggle = (idx: number) => {
+    setSelected((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
+  const handleConfirm = () => {
+    const chosen = ancillaries.filter((_, idx) => selected[idx]);
+    if (chosen.length === 0) return;
+    
+    const pnr = chosen[0].pnr || "my booking";
+    const descriptions = chosen.map((c) => `add ${c.type} ancillary for ${c.amount} USD`).join(" and ");
+    const msg = `I want to add the following to booking ${pnr}: ${descriptions}`;
+    if (onSelect) {
+      onSelect(msg);
+    }
+  };
+
+  return (
+    <div style={{
+      background: "#f8fafc",
+      border: "1px solid #e2e8f0",
+      borderRadius: "10px",
+      padding: "14px 16px",
+      margin: "12px 0",
+      width: "100%",
+      boxShadow: "0 4px 6px rgba(0,0,0,0.05)"
+    }}>
+      <div style={{ fontWeight: "bold", fontSize: "14px", color: "#1e293b", marginBottom: "4px" }}>
+        💼 Inflight Comforts & Extra Services
+      </div>
+      <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "12px" }}>
+        Customize your trip by selecting additional ancillaries below:
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
+        {ancillaries.map((anc, idx) => (
+          <div
+            key={idx}
+            onClick={() => handleToggle(idx)}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "10px 12px",
+              background: selected[idx] ? "#f0f9ff" : "#fff",
+              border: `1px solid ${selected[idx] ? "#0ea5e9" : "#cbd5e1"}`,
+              borderRadius: "6px",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <input
+                type="checkbox"
+                checked={!!selected[idx]}
+                onChange={() => {}}
+                style={{ cursor: "pointer" }}
+              />
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "#334155" }}>
+                {anc.label}
+              </span>
+            </div>
+            <span style={{ fontSize: "12px", fontWeight: "bold", color: "#10b981" }}>
+              +${anc.amount}
             </span>
-            <Tag color="cyan" style={{ margin: 0, fontWeight: "bold" }}>
-              ${flight.price}
-            </Tag>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-            <div>
-              <div style={{ fontSize: "16px", fontWeight: "800" }}>{flight.origin}</div>
-              <div style={{ fontSize: "10px", color: "#94a3b8" }}>Origin</div>
-            </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 10px", position: "relative" }}>
-              <span style={{ fontSize: "12px", color: "#38bdf8", transform: "translateY(-4px)" }}>✈</span>
-              <div style={{ borderTop: "1px dashed #475569", width: "100%", marginTop: "-4px" }} />
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: "16px", fontWeight: "800" }}>{flight.destination}</div>
-              <div style={{ fontSize: "10px", color: "#94a3b8" }}>Destination</div>
-            </div>
+        ))}
+      </div>
+      <Button
+        type="primary"
+        onClick={handleConfirm}
+        disabled={!Object.values(selected).some(Boolean)}
+        style={{
+          width: "100%",
+          background: "#0ea5e9",
+          border: "none",
+          fontWeight: "bold",
+          borderRadius: "6px",
+          height: "36px"
+        }}
+      >
+        Add Selected to Booking
+      </Button>
+    </div>
+  );
+};
+
+const CheckinDeclarationCard: React.FC<{
+  pnr: string;
+  passengerName?: string;
+  onConfirm?: () => void;
+}> = ({ pnr, passengerName, onConfirm }) => {
+  const [declared, setDeclared] = useState(false);
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+      border: "1px solid #cbd5e1",
+      borderRadius: "12px",
+      padding: "16px",
+      margin: "12px 0",
+      boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+      width: "100%",
+      color: "#1e293b"
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid #e2e8f0", paddingBottom: "10px", marginBottom: "12px" }}>
+        <span style={{ fontSize: "20px" }}>⚠️</span>
+        <div>
+          <div style={{ fontWeight: "800", fontSize: "14px", color: "#0f172a" }}>
+            Hazardous Materials Safety Declaration
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#94a3b8", borderTop: "1px solid #334155", paddingTop: "6px", marginTop: "4px" }}>
-            <span>Departure: <strong>{flight.departure_time || "N/A"}</strong></span>
-            <span>Date: <strong>{flight.date || "Anydate"}</strong></span>
+          <div style={{ fontSize: "11px", color: "#64748b" }}>
+            Required for PNR: <strong>{pnr}</strong> {passengerName ? `(${passengerName})` : ""}
           </div>
-          {onSelect && (
-            <Button
-              size="small"
-              type="primary"
-              style={{ background: "#38bdf8", border: "none", borderRadius: "4px", fontWeight: "bold", marginTop: "4px", width: "fit-content" }}
-              onClick={() => onSelect(flight.flight_number, flight.date)}
-            >
-              Select & Book Flight
-            </Button>
-          )}
         </div>
-      ))}
+      </div>
+
+      <div style={{ fontSize: "11px", color: "#334155", lineHeight: "1.5", marginBottom: "14px", background: "#fff1f2", border: "1px solid #ffe4e6", borderRadius: "8px", padding: "10px 12px" }}>
+        <strong style={{ color: "#be123c", display: "block", marginBottom: "4px" }}>Prohibited Dangerous Goods:</strong>
+        To ensure flight safety, civil aviation regulations strictly prohibit passengers from carrying dangerous goods in checked or carry-on baggage. These include:
+        <ul style={{ margin: "6px 0 0 0", paddingLeft: "16px" }}>
+          <li>Explosives, fireworks, flares, and ammunition.</li>
+          <li>Lithium-ion batteries (above 100Wh) or loose power banks in checked bags.</li>
+          <li>Flammable liquids, lighter fuels, aerosols, and matches.</li>
+          <li>Corrosives, toxic substances, radioactive or infectious materials.</li>
+        </ul>
+      </div>
+
+      <div 
+        onClick={() => setDeclared(!declared)}
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "10px",
+          padding: "10px",
+          background: declared ? "#f0fdf4" : "#f8fafc",
+          border: `1px solid ${declared ? "#4ade80" : "#cbd5e1"}`,
+          borderRadius: "8px",
+          cursor: "pointer",
+          marginBottom: "14px",
+          transition: "all 0.2s"
+        }}
+      >
+        <input 
+          type="checkbox" 
+          checked={declared} 
+          onChange={() => {}} 
+          style={{ marginTop: "3px", cursor: "pointer" }}
+        />
+        <span style={{ fontSize: "11px", fontWeight: "600", color: "#334155", userSelect: "none" }}>
+          I declare that I have read the hazardous materials list and certify that none of these items are present in my baggage.
+        </span>
+      </div>
+
+      <Button
+        type="primary"
+        onClick={onConfirm}
+        disabled={!declared}
+        style={{
+          width: "100%",
+          background: declared ? "#22c55e" : "#cbd5e1",
+          borderColor: declared ? "#22c55e" : "#cbd5e1",
+          fontWeight: "bold",
+          borderRadius: "6px",
+          height: "36px"
+        }}
+      >
+        Confirm Safety Declaration & Proceed
+      </Button>
     </div>
   );
 };
 
 const TicketsCardList: React.FC<{ bookings: any[]; onSendMessage?: (text: string) => void }> = ({ bookings, onSendMessage }) => {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px", margin: "12px 0", width: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px", margin: "8px 0", width: "100%" }}>
       {bookings.map((booking, index) => {
         const isPaid = booking.status === "booked" || booking.status === "confirmed" || booking.status === "ticketed";
-        const isPending = booking.status === "pending-payment";
-        
+        const isPending = booking.status === "pending-payment" || booking.status === "held";
+        const isCheckedIn = booking.status === "checked-in" || booking.status === "checked_in";
+        const isBoarded = booking.status === "boarded";
+        const isCancelled = booking.status === "cancelled";
+
+        const accentColor = isBoarded ? "#6366f1"
+          : isCheckedIn ? "#0ea5e9"
+          : isPaid ? "#10b981"
+          : isPending ? "#f59e0b"
+          : "#ef4444";
+
+        const tagColor = isBoarded ? "purple"
+          : isCheckedIn ? "blue"
+          : isPaid ? "green"
+          : isPending ? "gold"
+          : "red";
+
+        if (isCheckedIn) {
+          return (
+            <div key={index} style={{
+              background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+              color: "#fff",
+              borderRadius: "16px",
+              border: "1px dashed #38bdf8",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.3)",
+              padding: "16px",
+              position: "relative",
+              overflow: "hidden"
+            }}>
+              {/* Notch cut-outs */}
+              <div style={{ position: "absolute", left: "-8px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px", borderRadius: "50%", background: "#f1f5f9", borderRight: "1.5px dashed #38bdf8", zIndex: 2 }} />
+              <div style={{ position: "absolute", right: "-8px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px", borderRadius: "50%", background: "#f1f5f9", borderLeft: "1.5px dashed #38bdf8", zIndex: 2 }} />
+
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px dashed #334155", paddingBottom: "10px", marginBottom: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontSize: "16px" }}>🎫</span>
+                  <span style={{ fontWeight: "800", color: "#38bdf8", fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                    {booking.airline || "APEX AIR"} BOARDING PASS
+                  </span>
+                </div>
+                <Tag color="cyan" style={{ margin: 0, fontWeight: "bold", fontSize: "10px" }}>
+                  BOARDING
+                </Tag>
+              </div>
+
+              {/* Route */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <div>
+                  <div style={{ fontSize: "28px", fontWeight: "900", color: "#fff", lineHeight: "1", letterSpacing: "0.5px" }}>{booking.origin}</div>
+                  <div style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>{booking.origin_city || "Departure"}</div>
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 14px", position: "relative" }}>
+                  <span style={{ fontSize: "14px", color: "#38bdf8", transform: "translateY(-4px)" }}>✈</span>
+                  <div style={{ borderTop: "1.5px dashed #475569", width: "100%", marginTop: "-4px" }} />
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: "28px", fontWeight: "900", color: "#fff", lineHeight: "1", letterSpacing: "0.5px" }}>{booking.destination}</div>
+                  <div style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>{booking.destination_city || "Arrival"}</div>
+                </div>
+              </div>
+
+              {/* Details grid */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: "10px 14px",
+                borderBottom: "1px dashed #334155",
+                paddingBottom: "12px",
+                marginBottom: "12px",
+                fontSize: "11px"
+              }}>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: "8.5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Passenger</div>
+                  <div style={{ fontWeight: "700", color: "#fff", marginTop: "2px" }}>{booking.passenger_name || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: "8.5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Flight</div>
+                  <div style={{ fontWeight: "700", color: "#fff", fontFamily: "monospace", marginTop: "2px" }}>{booking.flight_number || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: "8.5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Date</div>
+                  <div style={{ fontWeight: "700", color: "#fff", marginTop: "2px" }}>{booking.date || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: "8.5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Seat</div>
+                  <div style={{ marginTop: "2px" }}>
+                    <span style={{
+                      fontWeight: "900", color: "#000",
+                      background: "#34d399", padding: "1px 6px",
+                      borderRadius: "4px", fontFamily: "monospace", fontSize: "12px"
+                    }}>
+                      {booking.seat || "TBD"}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: "8.5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Gate</div>
+                  <div style={{ marginTop: "2px" }}>
+                    <span style={{
+                      fontWeight: "900", color: "#000",
+                      background: "#a78bfa", padding: "1px 6px",
+                      borderRadius: "4px", fontFamily: "monospace", fontSize: "12px"
+                    }}>
+                      {booking.gate || "B3"}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: "8.5px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Class</div>
+                  <div style={{ fontWeight: "700", color: "#38bdf8", marginTop: "2px", textTransform: "uppercase", fontSize: "10px" }}>
+                    {booking.cabin_class || "Economy"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Barcode & PNR Stub */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", background: "#fff", padding: "10px", borderRadius: "8px" }}>
+                <div style={{ display: "flex", height: "35px", width: "100%", justifyContent: "center", overflow: "hidden", opacity: 0.9 }}>
+                  {Array.from({ length: 42 }).map((_, i) => (
+                    <div key={i} style={{
+                      width: `${(i % 3 === 0 ? 3 : (i % 2 === 0 ? 1 : 2))}px`,
+                      backgroundColor: "#000",
+                      marginRight: `${(i % 5 === 0 ? 2 : 1)}px`,
+                      height: "100%"
+                    }} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "9px", fontFamily: "monospace", color: "#64748b", fontWeight: "bold" }}>
+                  <span>PNR: {booking.pnr}</span>
+                  <span>SEQ: 00{index + 1}</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div key={index} style={{
-            background: "#f8fafc",
+            background: "#ffffff",
             color: "#1e293b",
-            padding: "12px 16px",
-            borderRadius: "10px",
-            border: `1px solid ${isPaid ? "#bbf7d0" : isPending ? "#fef08a" : "#fecaca"}`,
-            borderLeft: `4px solid ${isPaid ? "#10b981" : isPending ? "#eab308" : "#ef4444"}`,
-            boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px"
+            borderRadius: "12px",
+            border: `1px solid ${isCancelled ? "#fecaca" : "#e2e8f0"}`,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            overflow: "hidden",
+            opacity: isCancelled ? 0.75 : 1,
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "11px", color: "#64748b", fontWeight: "bold" }}>
-                PNR RECORD: <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", color: "#0f172a", fontFamily: "monospace" }}>{booking.pnr}</code>
-              </span>
-              <Tag color={isPaid ? "green" : isPending ? "gold" : "red"} style={{ margin: 0, fontWeight: "bold", fontSize: "10px" }}>
-                {booking.status?.toUpperCase()}
-              </Tag>
-            </div>
-            
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
-              <span style={{ fontWeight: "700", fontSize: "13px" }}>{booking.origin} ➡️ {booking.destination}</span>
-              <span style={{ fontSize: "11px", color: "#64748b", fontFamily: "monospace" }}>Flight {booking.flight_number}</span>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
-              <span>Passenger: <strong>{booking.passenger_name}</strong></span>
-              <span>Date: <strong>{booking.date}</strong></span>
-            </div>
-
-            {isPending && (
-              <div style={{ marginTop: "8px", borderTop: "1px dashed #e2e8f0", paddingTop: "8px", display: "flex", justifyContent: "flex-end" }}>
-                <Button 
-                  type="primary" 
-                  size="small" 
-                  href={`/payment?pnr=${booking.pnr}&amount=150&flight=${booking.flight_number}&origin=${booking.origin}&destination=${booking.destination}&date=${booking.date}&passenger_id=${booking.passenger_id || ""}`}
-                  target="_blank"
-                  rel="opener"
-                  style={{ fontSize: "11px", background: "#eab308", border: "none", borderRadius: "4px", fontWeight: "bold" }}
-                >
-                  💳 Complete Payment
-                </Button>
+            {/* Card Header — airline + PNR + status */}
+            <div style={{
+              background: `linear-gradient(90deg, #0f172a, #1e293b)`,
+              padding: "10px 14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom: `2px solid ${accentColor}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "14px" }}>✈️</span>
+                <span style={{ color: "#38bdf8", fontWeight: "700", fontSize: "11px", letterSpacing: "1px", textTransform: "uppercase" }}>
+                  {booking.airline || "APEX AIRLINES"}
+                </span>
               </div>
-            )}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontFamily: "monospace", fontSize: "11px", color: "#94a3b8", background: "#0f172a", padding: "2px 8px", borderRadius: "4px", fontWeight: "bold" }}>
+                  {booking.pnr}
+                </span>
+                <Tag color={tagColor} style={{ margin: 0, fontWeight: "bold", fontSize: "10px" }}>
+                  {booking.status?.toUpperCase().replace(/_/g, "-")}
+                </Tag>
+              </div>
+            </div>
 
-            {onSendMessage && !isPending && booking.status !== "cancelled" && (
-              <div style={{ marginTop: "10px", display: "flex", gap: "6px", flexWrap: "wrap", borderTop: "1px dashed #e2e8f0", paddingTop: "8px" }}>
-                <Button 
-                  size="small" 
-                  onClick={() => onSendMessage(`Select seat for my booking ${booking.pnr}`)}
-                  style={{ fontSize: "11px", borderRadius: "4px" }}
-                >
-                  💺 Choose Seat
-                </Button>
-                <Button 
-                  size="small" 
-                  onClick={() => onSendMessage(`Choose meal option for booking ${booking.pnr}`)}
-                  style={{ fontSize: "11px", borderRadius: "4px" }}
-                >
-                  🍱 Choose Meal
-                </Button>
-                <Button 
-                  size="small" 
-                  onClick={() => onSendMessage(`Reschedule booking ${booking.pnr}`)}
-                  style={{ fontSize: "11px", borderRadius: "4px" }}
-                >
-                  🔄 Reschedule
-                </Button>
-                <Button 
-                  danger 
-                  size="small" 
-                  onClick={() => onSendMessage(`Cancel booking ${booking.pnr}`)}
-                  style={{ fontSize: "11px", borderRadius: "4px" }}
-                >
-                  ❌ Cancel
-                </Button>
+            {/* Route row */}
+            <div style={{ padding: "12px 14px 8px 14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                <div>
+                  <div style={{ fontSize: "22px", fontWeight: "800", color: "#0f172a", lineHeight: "1" }}>{booking.origin}</div>
+                  <div style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>Origin</div>
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "0 10px" }}>
+                  <span style={{ fontSize: "14px", color: "#38bdf8" }}>✈</span>
+                  <div style={{ width: "100%", borderTop: "1.5px dashed #cbd5e1", marginTop: "2px" }} />
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: "22px", fontWeight: "800", color: "#0f172a", lineHeight: "1" }}>{booking.destination}</div>
+                  <div style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", marginTop: "2px" }}>Destination</div>
+                </div>
+              </div>
+
+              {/* Details grid — all available fields */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: "8px 12px",
+                borderTop: "1px solid #f1f5f9",
+                paddingTop: "10px",
+                fontSize: "11px"
+              }}>
+                <div>
+                  <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Passenger</div>
+                  <div style={{ fontWeight: "700", color: "#1e293b", marginTop: "2px" }}>{booking.passenger_name || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Flight</div>
+                  <div style={{ fontWeight: "700", color: "#1e293b", fontFamily: "monospace", marginTop: "2px" }}>{booking.flight_number || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Date</div>
+                  <div style={{ fontWeight: "700", color: "#1e293b", marginTop: "2px" }}>{booking.date || "—"}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Seat</div>
+                  <div style={{ marginTop: "2px" }}>
+                    {booking.seat ? (
+                      <span style={{
+                        fontWeight: "800", color: "#0284c7",
+                        background: "#e0f2fe", padding: "2px 8px",
+                        borderRadius: "4px", fontFamily: "monospace", fontSize: "12px"
+                      }}>
+                        {booking.seat}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#94a3b8", fontStyle: "italic", fontSize: "10px" }}>Not assigned</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Gate</div>
+                  <div style={{ marginTop: "2px" }}>
+                    {booking.gate ? (
+                      <span style={{
+                        fontWeight: "800", color: "#7c3aed",
+                        background: "#ede9fe", padding: "2px 8px",
+                        borderRadius: "4px", fontFamily: "monospace", fontSize: "12px"
+                      }}>
+                        {booking.gate}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#94a3b8", fontStyle: "italic", fontSize: "10px" }}>TBD</span>
+                    )}
+                  </div>
+                </div>
+                {booking.cabin_class && (
+                  <div>
+                    <div style={{ color: "#94a3b8", fontSize: "9px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Class</div>
+                    <div style={{ fontWeight: "700", color: "#1e293b", marginTop: "2px", textTransform: "capitalize" }}>{booking.cabin_class}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Status-specific banners */}
+              {isBoarded && (
+                <div style={{ marginTop: "8px", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", color: "#6d28d9", display: "flex", alignItems: "center", gap: "6px" }}>
+                  🛫 <strong>Boarded</strong> — Have a great flight!
+                </div>
+              )}
+              {isCancelled && (
+                <div style={{ marginTop: "8px", background: "#fff1f2", border: "1px solid #fecdd3", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", color: "#be123c", display: "flex", alignItems: "center", gap: "6px" }}>
+                  ❌ <strong>Cancelled</strong> — This ticket is no longer valid.
+                </div>
+              )}
+            </div>
+
+            {/* Action bar */}
+            {(isPending || (!isCancelled && !isBoarded && onSendMessage)) && (
+              <div style={{ padding: "8px 14px 10px 14px", borderTop: "1px dashed #e2e8f0", display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                {isPending && (
+                  <Button
+                    type="primary"
+                    size="small"
+                    href={`/payment?pnr=${booking.pnr}&amount=150&flight=${booking.flight_number}&origin=${booking.origin}&destination=${booking.destination}&date=${booking.date}&passenger_id=${booking.passenger_id || ""}`}
+                    target="_blank"
+                    rel="opener"
+                    style={{ fontSize: "11px", background: "#f59e0b", border: "none", borderRadius: "6px", fontWeight: "bold" }}
+                  >
+                    💳 Complete Payment
+                  </Button>
+                )}
+                {onSendMessage && !isPending && !isBoarded && !isCancelled && (
+                  <>
+                    {!booking.seat && (
+                      <Button size="small" onClick={() => onSendMessage(`Select seat for my booking ${booking.pnr}`)} style={{ fontSize: "11px", borderRadius: "4px" }}>
+                        💺 Choose Seat
+                      </Button>
+                    )}
+                    <Button size="small" onClick={() => onSendMessage(`Choose meal option for booking ${booking.pnr}`)} style={{ fontSize: "11px", borderRadius: "4px" }}>
+                      🍱 Meal
+                    </Button>
+                    {!isCheckedIn && (
+                      <Button size="small" onClick={() => onSendMessage(`Reschedule booking ${booking.pnr}`)} style={{ fontSize: "11px", borderRadius: "4px" }}>
+                        🔄 Reschedule
+                      </Button>
+                    )}
+                    {!isCheckedIn && (
+                      <Button size="small" onClick={() => onSendMessage(`Check in for booking ${booking.pnr}`)} style={{ fontSize: "11px", borderRadius: "4px", background: "#f0f9ff", borderColor: "#0ea5e9", color: "#0ea5e9" }}>
+                        🎫 Check In
+                      </Button>
+                    )}
+                    <Button danger size="small" onClick={() => onSendMessage(`Cancel booking ${booking.pnr}`)} style={{ fontSize: "11px", borderRadius: "4px" }}>
+                      ❌ Cancel
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -166,8 +629,8 @@ const PaymentLinkCard: React.FC<{ payment: any }> = ({ payment }) => {
     <div style={{
       background: "linear-gradient(135deg, #1e1b4b 0%, #311042 100%)",
       color: "#fff",
-      padding: "16px",
-      borderRadius: "12px",
+      padding: "12px 14px",
+      borderRadius: "10px",
       border: "1px solid #4338ca",
       boxShadow: "0 6px 12px rgba(0,0,0,0.15)",
       margin: "12px 0",
@@ -211,30 +674,35 @@ const PaymentLinkCard: React.FC<{ payment: any }> = ({ payment }) => {
 const PassengerReviewCard: React.FC<{ data: any; onConfirm?: () => void }> = ({ data, onConfirm }) => {
   return (
     <div style={{
-      background: "#f1f5f9",
-      border: "1px solid #cbd5e1",
-      borderRadius: "8px",
-      padding: "12px 16px",
-      margin: "8px 0",
-      color: "#1e293b",
-      width: "100%"
+      background: "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)",
+      border: "1px solid #bae6fd",
+      borderLeft: "4px solid #0284c7",
+      borderRadius: "10px",
+      padding: "12px 14px",
+      margin: "6px 0",
+      color: "#0c4a6e",
+      width: "100%",
+      boxShadow: "0 2px 8px rgba(2, 132, 199, 0.08)"
     }}>
-      <div style={{ fontWeight: "bold", marginBottom: "8px", borderBottom: "1px solid #cbd5e1", paddingBottom: "4px" }}>
-        📝 Review Passenger Information
+      <div style={{ fontWeight: "700", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+        <span>📋</span> Passenger Review
       </div>
-      <div style={{ fontSize: "12px", display: "flex", flexDirection: "column", gap: "4px" }}>
-        <div><strong>Name:</strong> {data.name}</div>
-        <div><strong>Email:</strong> {data.email}</div>
-        <div><strong>Frequent Flyer No:</strong> {data.frequent_flyer || "N/A"}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: "12px" }}>
+        <span style={{ color: "#0369a1", fontWeight: "600" }}>Name</span>
+        <span style={{ fontWeight: "700", color: "#0c4a6e" }}>{data.name}</span>
+        <span style={{ color: "#0369a1", fontWeight: "600" }}>Email</span>
+        <span style={{ color: "#0c4a6e" }}>{data.email}</span>
+        <span style={{ color: "#0369a1", fontWeight: "600" }}>FF No.</span>
+        <span style={{ fontFamily: "monospace", color: "#0c4a6e", background: "#bae6fd", padding: "1px 6px", borderRadius: "4px", width: "fit-content" }}>{data.frequent_flyer || "N/A"}</span>
       </div>
       {onConfirm && (
         <Button 
           type="primary" 
           size="small" 
           onClick={onConfirm}
-          style={{ marginTop: "12px", background: "#0284c7", border: "none", borderRadius: "4px" }}
+          style={{ marginTop: "10px", background: "#0284c7", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "12px" }}
         >
-          Confirm Information & Proceed
+          ✓ Confirm & Proceed
         </Button>
       )}
     </div>
@@ -335,19 +803,33 @@ const SeatsOptionsCard: React.FC<{ seats: any; onSelect?: (seat: string) => void
         </div>
       </div>
       
-      <Button 
-        type="primary"
-        onClick={handleOpen}
-        style={{
-          background: "linear-gradient(135deg, #722ed1 0%, #9254de 100%)",
-          border: "none",
-          fontWeight: "bold",
-          borderRadius: "6px",
-          marginTop: "4px"
-        }}
-      >
-        💺 View Visual Seat Map & Select Seat
-      </Button>
+      <div style={{ display: "flex", gap: "8px", marginTop: "4px", width: "100%" }}>
+        <Button 
+          type="primary"
+          onClick={handleOpen}
+          style={{
+            flex: 1,
+            background: "linear-gradient(135deg, #722ed1 0%, #9254de 100%)",
+            border: "none",
+            fontWeight: "bold",
+            borderRadius: "6px"
+          }}
+        >
+          💺 View Seat Map
+        </Button>
+        <Button 
+          onClick={() => onSelect && onSelect("system-assigned")}
+          style={{
+            flex: 1,
+            borderColor: "#d9d9d9",
+            fontWeight: "bold",
+            borderRadius: "6px",
+            color: "#595959"
+          }}
+        >
+          🎲 Auto-Assign Seat
+        </Button>
+      </div>
 
       <Modal
         title={
@@ -384,7 +866,7 @@ const SeatsOptionsCard: React.FC<{ seats: any; onSelect?: (seat: string) => void
               padding: "10px 14px",
               borderRadius: "8px",
               boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-              marginBottom: "20px",
+              marginBottom: "12px",
               fontSize: "11px",
               color: "#64748b",
               fontWeight: "600"
@@ -652,20 +1134,22 @@ const OptionsCard: React.FC<{ options: any[]; onSelect?: (text: string) => void 
 const ConfirmCard: React.FC<{ data: any; onSelect?: (val: string) => void }> = ({ data, onSelect }) => {
   return (
     <div style={{
-      background: "#fffbeb",
+      background: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
       border: "1px solid #fde68a",
-      borderRadius: "8px",
-      padding: "12px 16px",
-      margin: "8px 0",
+      borderLeft: "4px solid #f59e0b",
+      borderRadius: "10px",
+      padding: "12px 14px",
+      margin: "6px 0",
       width: "100%",
       display: "flex",
       flexDirection: "column",
-      gap: "10px"
+      gap: "8px",
+      boxShadow: "0 2px 8px rgba(245, 158, 11, 0.08)"
     }}>
-      <div style={{ fontWeight: "bold", color: "#78350f", fontSize: "13px" }}>
-        ❓ Confirmation Required:
+      <div style={{ fontWeight: "700", color: "#78350f", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+        <span>❓</span> Confirm Action
       </div>
-      <div style={{ fontSize: "12px", color: "#92400e" }}>
+      <div style={{ fontSize: "12px", color: "#92400e", lineHeight: "1.5" }}>
         {data.question || "Would you like to proceed?"}
       </div>
       <div style={{ display: "flex", gap: "8px" }}>
@@ -673,18 +1157,234 @@ const ConfirmCard: React.FC<{ data: any; onSelect?: (val: string) => void }> = (
           type="primary"
           size="small"
           onClick={() => onSelect && onSelect(data.yes_text || "Yes")}
-          style={{ background: "#10b981", border: "none", borderRadius: "4px", fontWeight: "bold" }}
+          style={{ background: "#10b981", border: "none", borderRadius: "6px", fontWeight: "bold", fontSize: "12px" }}
         >
-          {data.yes_label || "Yes, proceed"}
+          ✓ {data.yes_label || "Yes, proceed"}
         </Button>
         <Button
           danger
           size="small"
           onClick={() => onSelect && onSelect(data.no_text || "No")}
-          style={{ borderRadius: "4px", fontWeight: "bold" }}
+          style={{ borderRadius: "6px", fontWeight: "bold", fontSize: "12px" }}
         >
-          {data.no_label || "No, cancel"}
+          ✗ {data.no_label || "No, cancel"}
         </Button>
+      </div>
+    </div>
+  );
+};
+
+const LoyaltyUpgradeCard: React.FC<{ 
+  data: any; 
+  onUpgrade?: (pnr: string, miles: number) => void 
+}> = ({ data, onUpgrade }) => {
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #1e1b4b 0%, #311042 100%)",
+      border: "1px solid #c084fc",
+      borderLeft: "5px solid #a855f7",
+      borderRadius: "12px",
+      padding: "16px",
+      margin: "10px 0",
+      width: "100%",
+      color: "#f3e8ff",
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px",
+      boxShadow: "0 4px 15px rgba(168, 85, 247, 0.15)",
+      position: "relative",
+      overflow: "hidden"
+    }}>
+      <div style={{
+        position: "absolute",
+        top: "-20px",
+        right: "-20px",
+        width: "80px",
+        height: "80px",
+        background: "rgba(168, 85, 247, 0.3)",
+        borderRadius: "50%",
+        filter: "blur(20px)",
+        pointerEvents: "none"
+      }} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: "800", color: "#e9d5ff", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>👑</span> Loyalty Flight Upgrade
+        </div>
+        <span style={{
+          background: "linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)",
+          color: "#78350f",
+          fontSize: "9px",
+          fontWeight: "800",
+          padding: "2px 8px",
+          borderRadius: "10px",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px"
+        }}>
+          Gold Tier Exclusive
+        </span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ fontSize: "12px", color: "#c084fc" }}>Passenger: <b>{data.passenger_name}</b></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "4px" }}>
+          <div>
+            <div style={{ fontSize: "9px", color: "#a5b4fc", textTransform: "uppercase" }}>Your Miles Balance</div>
+            <div style={{ fontSize: "20px", fontWeight: "900", color: "#fff", lineHeight: "1" }}>
+              {data.current_miles?.toLocaleString() || "0"} <span style={{ fontSize: "11px", fontWeight: "normal", color: "#cbd5e1" }}>miles</span>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "9px", color: "#f472b6", textTransform: "uppercase" }}>Required for Upgrade</div>
+            <div style={{ fontSize: "16px", fontWeight: "bold", color: "#f472b6" }}>
+              {data.required_miles?.toLocaleString() || "5,000"} miles
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid rgba(168, 85, 247, 0.2)", paddingTop: "10px" }} />
+
+      <div style={{ fontSize: "11px", color: "#cbd5e1", lineHeight: "1.4" }}>
+        Upgrade PNR <b>{data.pnr}</b> to Business Class immediately. Includes priority boarding, premium meals, extra baggage allowance, and luxury lounge access.
+      </div>
+
+      <Button
+        type="primary"
+        onClick={() => onUpgrade && onUpgrade(data.pnr, data.required_miles)}
+        disabled={data.current_miles < data.required_miles}
+        style={{
+          background: data.current_miles >= data.required_miles 
+            ? "linear-gradient(95deg, #a855f7 0%, #7c3aed 100%)" 
+            : "#4b5563",
+          border: "none",
+          borderRadius: "8px",
+          fontWeight: "800",
+          fontSize: "12px",
+          height: "34px",
+          color: "#fff",
+          boxShadow: data.current_miles >= data.required_miles ? "0 4px 10px rgba(124, 58, 237, 0.3)" : "none",
+          transition: "all 0.3s ease"
+        }}
+      >
+        ✨ Redeem Upgrade Now
+      </Button>
+    </div>
+  );
+};
+
+const FlightStatusCard: React.FC<{ data: any }> = ({ data }) => {
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "scheduled": return { bg: "rgba(59, 130, 246, 0.1)", border: "#3b82f6", text: "#60a5fa" };
+      case "boarding": return { bg: "rgba(16, 185, 129, 0.1)", border: "#10b981", text: "#34d399" };
+      case "departed": return { bg: "rgba(99, 102, 241, 0.1)", border: "#6366f1", text: "#818cf8" };
+      case "arrived": return { bg: "rgba(16, 185, 129, 0.15)", border: "#059669", text: "#10b981" };
+      case "delayed": return { bg: "rgba(245, 158, 11, 0.1)", border: "#f59e0b", text: "#fbbf24" };
+      case "cancelled": return { bg: "rgba(239, 68, 68, 0.1)", border: "#ef4444", text: "#f87171" };
+      default: return { bg: "rgba(156, 163, 175, 0.1)", border: "#9ca3af", text: "#d1d5db" };
+    }
+  };
+
+  const colors = getStatusColor(data.status);
+  const depTime = data.departure_datetime ? new Date(data.departure_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
+  const arrTime = data.arrival_datetime ? new Date(data.arrival_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A";
+  const depDate = data.departure_datetime ? new Date(data.departure_datetime).toLocaleDateString([], { month: 'short', day: 'numeric' }) : "";
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+      border: `1px solid ${colors.border}`,
+      borderLeft: `5px solid ${colors.border}`,
+      borderRadius: "12px",
+      padding: "16px",
+      margin: "10px 0",
+      width: "100%",
+      color: "#f8fafc",
+      boxShadow: "0 4px 15px rgba(0, 0, 0, 0.3)",
+      fontFamily: "inherit"
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <div>
+          <div style={{ fontSize: "14px", fontWeight: "800", color: "#f1f5f9" }}>
+            ✈️ {data.airline_name} <span style={{ color: "#38bdf8" }}>{data.flight_number}</span>
+          </div>
+          {depDate && <div style={{ fontSize: "10px", color: "#94a3b8" }}>{depDate}</div>}
+        </div>
+        <span style={{
+          background: colors.bg,
+          border: `1px solid ${colors.border}`,
+          color: colors.text,
+          fontSize: "10px",
+          fontWeight: "800",
+          padding: "3px 10px",
+          borderRadius: "8px",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px"
+        }}>
+          {data.status || "Unknown"}
+        </span>
+      </div>
+
+      {/* Progress Track */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "18px 0" }}>
+        <div style={{ width: "30%" }}>
+          <div style={{ fontSize: "24px", fontWeight: "900", color: "#fff", lineHeight: "1" }}>{data.origin_iata}</div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{data.origin_city}</div>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#38bdf8", marginTop: "4px" }}>{depTime}</div>
+        </div>
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", padding: "0 10px" }}>
+          {data.delay_minutes > 0 && (
+            <div style={{ fontSize: "10px", color: "#fbbf24", fontWeight: "bold", position: "absolute", top: "-18px" }}>
+              +{data.delay_minutes}m Delay
+            </div>
+          )}
+          <div style={{ width: "100%", height: "2px", background: "rgba(255,255,255,0.15)", position: "relative" }}>
+            <div style={{
+              position: "absolute",
+              left: data.status?.toLowerCase() === "arrived" ? "100%" : data.status?.toLowerCase() === "departed" ? "60%" : data.status?.toLowerCase() === "boarding" ? "20%" : "0%",
+              top: "-5px",
+              transform: "translateX(-50%)",
+              transition: "left 1s ease-in-out",
+              fontSize: "12px"
+            }}>
+              ✈️
+            </div>
+          </div>
+        </div>
+
+        <div style={{ width: "30%", textAlign: "right" }}>
+          <div style={{ fontSize: "24px", fontWeight: "900", color: "#fff", lineHeight: "1" }}>{data.destination_iata}</div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{data.destination_city}</div>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#38bdf8", marginTop: "4px" }}>{arrTime}</div>
+        </div>
+      </div>
+
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px" }} />
+
+      {/* Terminal Info */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
+        <div>
+          <div style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase" }}>Terminal</div>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#f1f5f9" }}>{data.terminal || "N/A"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase" }}>Gate</div>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#f1f5f9" }}>{data.gate || "N/A"}</div>
+        </div>
+        {data.delay_minutes > 0 ? (
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "9px", color: "#fbbf24", textTransform: "uppercase" }}>Remarks</div>
+            <div style={{ fontSize: "12px", fontWeight: "bold", color: "#fbbf24" }}>Delayed</div>
+          </div>
+        ) : (
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "9px", color: "#34d399", textTransform: "uppercase" }}>Remarks</div>
+            <div style={{ fontSize: "12px", fontWeight: "bold", color: "#34d399" }}>On Time</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -751,7 +1451,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
           display: "flex",
           flexDirection: isUser ? "row-reverse" : "row",
           alignItems: "flex-start",
-          maxWidth: "85%",
+          maxWidth: "92%",
           gap: "12px"
         }}
       >
@@ -783,7 +1483,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
             style={{
               backgroundColor: isUser ? "#1890ff" : "#ffffff",
               color: isUser ? "#ffffff" : "#000000",
-              padding: "12px 16px",
+              padding: "10px 14px",
               borderRadius: isUser ? "12px 12px 0 12px" : "12px 12px 12px 0",
               boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
               border: isUser ? "none" : "1px solid #f0f0f0",
@@ -834,7 +1534,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                   ol: ({ children }) => <ol style={{ margin: "0 0 8px 0", paddingLeft: "20px" }}>{children}</ol>,
                   li: ({ children }) => <li style={{ marginBottom: "4px" }}>{children}</li>,
                   code: ({ inline, className, children, ...props }: any) => {
-                    const match = /language-(\w+)/.exec(className || "");
+                    // FIX: Use [\w-]+ to capture hyphenated tags like passenger-review, meal-options, seats-options
+                    const match = /language-([\w-]+)/.exec(className || "");
                     let lang = match ? match[1] : "";
                     const content = String(children).replace(/\n$/, "");
 
@@ -850,7 +1551,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
 
                       if (isJson && parsedData !== null) {
                         // Auto-detect schema if language is "json" or not specified
-                        if (lang === "json" || lang === "") {
+                        const knownLangs = ["flights", "tickets", "payment", "passenger-review", "seats-options", "meal-options", "options", "confirm", "ancillary-options", "checkin-declaration", "loyalty-upgrade", "flight-status"];
+                        if (lang === "json" || lang === "" || !knownLangs.includes(lang)) {
                           if (Array.isArray(parsedData)) {
                             if (parsedData.length > 0) {
                               const first = parsedData[0];
@@ -862,17 +1564,27 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                                 lang = "meal-options";
                               } else if (first.label && first.text) {
                                 lang = "options";
+                              } else if (first.type && first.label && first.amount) {
+                                lang = "ancillary-options";
                               }
                             }
                           } else {
                             if (parsedData.pnr && (parsedData.flight_id || parsedData.flight_number) && parsedData.passenger_id) {
+                              parsedData.flight_id = parsedData.flight_number;
                               lang = "seats-options";
                             } else if (parsedData.pnr && (parsedData.price !== undefined || parsedData.amount !== undefined) && parsedData.flight_number) {
                               lang = "payment";
                             } else if (parsedData.name && parsedData.email) {
+                              // Catches passenger JSON even if LLM emitted wrong/missing code fence tag
                               lang = "passenger-review";
                             } else if (parsedData.question && parsedData.yes_text && parsedData.no_text) {
                               lang = "confirm";
+                            } else if (parsedData.pnr && parsedData.passenger_name && parsedData.is_checkin) {
+                              lang = "checkin-declaration";
+                            } else if (parsedData.pnr && parsedData.current_miles !== undefined && parsedData.required_miles !== undefined) {
+                              lang = "loyalty-upgrade";
+                            } else if (parsedData.flight_number && parsedData.status && !parsedData.passenger_id) {
+                              lang = "flight-status";
                             }
                           }
                         }
@@ -882,7 +1594,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                           return (
                             <FlightsCardList 
                               flights={parsedData} 
-                              onSelect={(flightNumber, date) => onSendMessage?.(`I want to book flight ${flightNumber} on ${date}`)} 
+                              onSelect={(flightNumber, date, bookingClass) => onSendMessage?.(`I want to book flight ${flightNumber} on ${date} in class ${bookingClass}`)} 
                             />
                           );
                         }
@@ -918,6 +1630,34 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                               onSelect={(code) => onSendMessage?.(`I select meal option ${code}`)}
                             />
                           );
+                        }
+                        if (lang === "ancillary-options" && Array.isArray(parsedData)) {
+                          return (
+                            <AncillaryOptionsCard 
+                              ancillaries={parsedData} 
+                              onSelect={(text) => onSendMessage?.(text)}
+                            />
+                          );
+                        }
+                        if (lang === "checkin-declaration") {
+                          return (
+                            <CheckinDeclarationCard 
+                              pnr={parsedData.pnr} 
+                              passengerName={parsedData.passenger_name}
+                              onConfirm={() => onSendMessage?.(`I confirm the safety declaration for PNR ${parsedData.pnr}. Please proceed.`)}
+                            />
+                          );
+                        }
+                        if (lang === "loyalty-upgrade") {
+                          return (
+                            <LoyaltyUpgradeCard 
+                              data={parsedData} 
+                              onUpgrade={(pnr, miles) => onSendMessage?.(`I want to upgrade PNR ${pnr} to Business Class using ${miles} miles`)}
+                            />
+                          );
+                        }
+                        if (lang === "flight-status") {
+                          return <FlightStatusCard data={parsedData} />;
                         }
                         if (lang === "options" && Array.isArray(parsedData)) {
                           return (
