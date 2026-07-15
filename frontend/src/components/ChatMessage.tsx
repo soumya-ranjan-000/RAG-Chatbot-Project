@@ -3,6 +3,8 @@ import { Avatar, Typography, Button, Tag, Tooltip, Modal } from "antd";
 import { UserOutlined, RobotOutlined, FileTextOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage as MessageType, ChunkSource } from "../types/chat";
+import { PSS_API_URL } from "../services/api";
+
 
 const { Text } = Typography;
 
@@ -252,7 +254,7 @@ const SeatsOptionsCard: React.FC<{ seats: any; onSelect?: (seat: string) => void
     setLoading(true);
     try {
       const flightId = seats.flight_id;
-      const res = await fetch(`http://localhost:8000/api/pss/flights/${flightId}/seats`);
+      const res = await fetch(`${PSS_API_URL}/flights/${flightId}/seats`);
       if (res.ok) {
         const data = await res.json();
         setSeatMap(data);

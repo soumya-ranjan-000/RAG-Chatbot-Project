@@ -10,6 +10,13 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
+let rawPssUrl = import.meta.env.VITE_PSS_API_URL || "http://localhost:8000/api/pss";
+if (rawPssUrl && !rawPssUrl.endsWith("/api/pss")) {
+  rawPssUrl = rawPssUrl.replace(/\/$/, "") + "/api/pss";
+}
+export const PSS_API_URL = rawPssUrl;
+
+
 const client = axios.create({
   baseURL: API_URL,
   headers: {

@@ -22,6 +22,17 @@ The `render.yaml` file in the root directory defines both services. To deploy:
 
 If you prefer to configure manually without render.yaml:
 
+### PSS (Passenger Service System) Service
+1. **Create Web Service**
+   - Name: `rag-chatbot-pss`
+   - Environment: `Python 3.13`
+   - Build Command: `cd pss_system && pip install -r requirements.txt`
+   - Start Command: `cd pss_system && uvicorn main:app --host 0.0.0.0 --port $PORT`
+   
+2. **Environment Variables**
+   - `SUPABASE_URL` → Your PSS Supabase project URL
+   - `SUPABASE_SERVICE_ROLE_KEY` → Your PSS Supabase service role API key
+
 ### Backend Service
 1. **Create Web Service**
    - Name: `rag-chatbot-backend`
@@ -35,7 +46,8 @@ If you prefer to configure manually without render.yaml:
    - `AWS_SECRET_ACCESS_KEY` → Your AWS secret key
    - `SUPABASE_URL` → Your Supabase project URL
    - `SUPABASE_KEY` → Your Supabase API key
-   - Any other `.env` variables needed
+   - `PSS_API_URL` → `https://rag-chatbot-pss.onrender.com` (use your deployed PSS URL)
+
 
 ### Frontend Service
 1. **Create Web Service**
@@ -49,10 +61,20 @@ If you prefer to configure manually without render.yaml:
 
 ## Build & Start Commands by Service
 
+### PSS Service (FastAPI)
+```bash
+# Build (run in /pss_system)
+pip install -r requirements.txt
+
+# Start (run in /pss_system)
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
 ### Backend (FastAPI)
 ```bash
-# Build
+# Build (run in /app)
 pip install -r requirements.txt
+
 
 # Start
 uvicorn app:app --host 0.0.0.0 --port $PORT
@@ -78,6 +100,12 @@ npm start
 
 ## Environment Variables for Production
 
+### PSS Service (.env for Render)
+```
+SUPABASE_URL=https://...supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+```
+
 ### Backend (.env for Render)
 ```
 OPENAI_API_KEY=sk-...
@@ -85,12 +113,14 @@ AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
 SUPABASE_URL=https://...supabase.co
 SUPABASE_KEY=eyJhbGc...
+PSS_API_URL=https://rag-chatbot-pss.onrender.com
 ```
 
 ### Frontend (.env.production)
 ```
 VITE_API_URL=https://rag-chatbot-backend.onrender.com
 ```
+
 
 ## Troubleshooting
 

@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, Form, Input, Button, Result, Typography, Row, Col, Alert, Spin } from "antd";
 import { CreditCardOutlined, SafetyCertificateOutlined, LockOutlined } from "@ant-design/icons";
+import { PSS_API_URL } from "../services/api";
+
 
 const { Title, Text } = Typography;
 
@@ -87,7 +89,7 @@ export const PaymentGatewayPage: React.FC = () => {
       // 4. Visa or fallback: Success
       if (cleanCard.startsWith("4") || cleanCard.length >= 15) {
         try {
-          const res = await fetch(`http://localhost:8000/api/pss/bookings/${pnr}/payment`, {
+          const res = await fetch(`${PSS_API_URL}/bookings/${pnr}/payment`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

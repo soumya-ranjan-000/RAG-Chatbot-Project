@@ -8,10 +8,9 @@ import {
   ArrowRightOutlined, ToolOutlined, UserOutlined, MailOutlined, NumberOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { PSS_API_URL } from "../services/api";
 
 const { Title, Text, Paragraph } = Typography;
-
-const PSS_API_URL = "http://localhost:8000/api/pss";
 
 interface BookingPortalProps {
   currentUser: {

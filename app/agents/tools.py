@@ -3,6 +3,9 @@ import httpx
 from langchain_core.tools import tool
 
 PSS_API_URL = os.environ.get("PSS_API_URL", "http://localhost:8000/api/pss")
+if PSS_API_URL and not PSS_API_URL.endswith("/api/pss"):
+    PSS_API_URL = PSS_API_URL.rstrip("/") + "/api/pss"
+
 
 @tool
 def check_passenger_profile(passenger_id: str) -> dict:

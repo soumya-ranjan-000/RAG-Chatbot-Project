@@ -1,4 +1,18 @@
 services:
+  # Passenger Service System (PSS) API Service
+  - type: web
+    name: rag-chatbot-pss
+    runtime: python
+    pythonVersion: 3.13
+    rootDir: ./pss_system
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13
+    plan: standard
+    region: oregon
+
   # Backend API Service
   - type: web
     name: rag-chatbot-backend
@@ -10,8 +24,13 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.13
+      - key: PSS_API_URL
+        fromService:
+          name: rag-chatbot-pss
+          property: url
     plan: standard
     region: oregon
+
 
   # Frontend Service (Static Site with Node.js)
   - type: web
@@ -24,6 +43,11 @@ services:
       - key: VITE_API_URL
         fromService:
           name: rag-chatbot-backend
+          property: url
+        scope: build
+      - key: VITE_PSS_API_URL
+        fromService:
+          name: rag-chatbot-pss
           property: url
         scope: build
     plan: standard

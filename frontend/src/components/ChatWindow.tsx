@@ -4,6 +4,7 @@ import { SendOutlined, SettingOutlined, DeleteOutlined } from "@ant-design/icons
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { chatService, type StreamEvent } from "../services/chatService";
 import type { ChatMessage } from "../types/chat";
+import { PSS_API_URL } from "../services/api";
 
 const { Text } = Typography;
 
@@ -18,9 +19,8 @@ interface ChatWindowProps {
   onToolActivity: (activity: any) => void;
 }
 
-const PSS_API_URL = "http://localhost:8000/api/pss";
-
 export const ChatWindow: React.FC<ChatWindowProps> = ({ 
+
   passengerProfile,
   onBookingUpdate,
   onToolActivity

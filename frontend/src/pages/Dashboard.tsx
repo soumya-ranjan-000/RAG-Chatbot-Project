@@ -14,6 +14,8 @@ import { ChatWindow } from "../components/ChatWindow";
 import { FlightPreviewPanel } from "../components/FlightPreviewPanel";
 import { BookingPortal } from "../components/BookingPortal";
 import { ProfilePanel } from "../components/ProfilePanel";
+import { PSS_API_URL } from "../services/api";
+
 
 interface DashboardProps {
   currentUser: {
@@ -50,7 +52,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
     const fetchPassengerBookings = async () => {
       if (currentUser.role === "passenger" && currentUser.passengerProfile?.passenger_id) {
         try {
-          const res = await fetch(`http://localhost:8000/api/pss/passengers/${currentUser.passengerProfile.passenger_id}`);
+          const res = await fetch(`${PSS_API_URL}/passengers/${currentUser.passengerProfile.passenger_id}`);
           if (res.ok) {
             const data = await res.json();
             if (data.bookings) {

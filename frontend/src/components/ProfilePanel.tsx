@@ -8,9 +8,9 @@ import {
   ShoppingOutlined, GiftOutlined, StarOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { PSS_API_URL } from "../services/api";
 
 const { Title, Text } = Typography;
-const PSS_API_URL = "http://localhost:8000/api/pss";
 
 interface ProfilePanelProps {
   currentUser: {

@@ -49,6 +49,9 @@ def get_chat_chain(model_name: str = "gpt-4o-mini"):
 from agents.booking_agent import run_booking_agent
 
 PSS_API_URL = os.environ.get("PSS_API_URL", "http://localhost:8000/api/pss")
+if PSS_API_URL and not PSS_API_URL.endswith("/api/pss"):
+    PSS_API_URL = PSS_API_URL.rstrip("/") + "/api/pss"
+
 
 async def stream_chat_response(
     query: str,
