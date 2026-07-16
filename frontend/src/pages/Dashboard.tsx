@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Tabs, message } from "antd";
-import { UploadOutlined, SearchOutlined, HistoryOutlined, MessageOutlined, EnvironmentOutlined, UserOutlined } from "@ant-design/icons";
+import { UploadOutlined, SearchOutlined, HistoryOutlined, MessageOutlined, EnvironmentOutlined, UserOutlined, SettingOutlined } from "@ant-design/icons";
 import { UploadForm } from "../components/UploadForm";
 import { SearchForm } from "../components/SearchForm";
 import { ResultsTable } from "../components/ResultsTable";
@@ -14,6 +14,8 @@ import { ChatWindow } from "../components/ChatWindow";
 import { FlightPreviewPanel } from "../components/FlightPreviewPanel";
 import { BookingPortal } from "../components/BookingPortal";
 import { ProfilePanel } from "../components/ProfilePanel";
+import { PassengerManagement } from "../components/PassengerManagement";
+import { SettingsPanel } from "../components/SettingsPanel";
 import { PSS_API_URL } from "../services/api";
 
 
@@ -200,7 +202,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "16px 20px" }}>
+        <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
           <BookingPortal 
             currentUser={currentUser} 
             onBookingCreated={(booking) => {
@@ -219,12 +221,25 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "16px 20px" }}>
+        <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
           <ProfilePanel 
             currentUser={currentUser} 
             bookings={bookings} 
             onBookingUpdate={handleBookingUpdate}
           />
+        </div>
+      ),
+    },
+    {
+      key: "passengers",
+      label: (
+        <>
+          <UserOutlined /> Passenger Management
+        </>
+      ),
+      children: (
+        <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
+          <PassengerManagement />
         </div>
       ),
     },
@@ -237,7 +252,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "16px 20px" }}>
+        <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
           <UploadForm />
         </div>
       ),
@@ -250,7 +265,7 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "16px 20px" }}>
+        <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
           <SearchForm 
             onSearch={handleSearch}
             queryFn={query}
@@ -278,11 +293,28 @@ export const Dashboard = ({ currentUser }: DashboardProps) => {
         </>
       ),
       children: (
-        <div style={{ padding: "16px 20px" }}>
+        <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
           <SearchHistory onSelectSearch={handleSearchAgain} />
         </div>
       ),
     },
+    ...(currentUser.role === "admin"
+      ? [
+          {
+            key: "settings",
+            label: (
+              <>
+                <SettingOutlined /> System Settings
+              </>
+            ),
+            children: (
+              <div style={{ padding: "16px 20px", height: "calc(100vh - 52px)", overflowY: "auto" }}>
+                <SettingsPanel />
+              </div>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Avatar, Typography, Button, Tag, Tooltip, Modal, Slider, Input, message } from "antd";
 import { UserOutlined, RobotOutlined, FileTextOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
@@ -688,7 +688,7 @@ const PaymentLinkCard: React.FC<{ payment: any }> = ({ payment }) => {
 
 const PassengerReviewCard: React.FC<{ data: any; onConfirm?: (paxList: any[]) => void }> = ({ data, onConfirm }) => {
   // If data has passengers list, use it. Otherwise, construct a default list with 1 passenger.
-  const initialPassengers = Array.isArray(data.passengers)
+  const initialPassengers = Array.isArray(data.passengers) && data.passengers.length > 0
     ? data.passengers.map((p: any) => ({
         first_name: p.first_name || "",
         last_name: p.last_name || "",
@@ -697,8 +697,8 @@ const PassengerReviewCard: React.FC<{ data: any; onConfirm?: (paxList: any[]) =>
         title: p.title || "MR"
       }))
     : [{
-        first_name: data.name?.split(" ")[0] || "",
-        last_name: data.name?.split(" ").slice(1).join(" ") || "",
+        first_name: data.first_name || data.name?.split(" ")[0] || "",
+        last_name: data.last_name || data.name?.split(" ").slice(1).join(" ") || "",
         email: data.email || "",
         passenger_type: "ADT",
         title: "MR"
@@ -928,6 +928,128 @@ const TimeSliderCard: React.FC<{
         style={{ background: "#9333ea", borderColor: "#9333ea", borderRadius: "6px", fontWeight: "bold", fontSize: "12px", height: "32px" }}
       >
         Confirm Time Range
+      </Button>
+    </div>
+  );
+};
+
+const CalendarCard: React.FC<{
+  data: any;
+  onSelect?: (date: string) => void;
+}> = ({ data, onSelect }) => {
+  const [selectedDate, setSelectedDate] = useState<string | null>(data.default || null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleInputClick = () => {
+    try {
+      if (inputRef.current && typeof inputRef.current.showPicker === "function") {
+        inputRef.current.showPicker();
+      }
+    } catch (e) {
+      console.warn("showPicker failed", e);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (selectedDate && onSelect) {
+      onSelect(selectedDate);
+    }
+  };
+
+  const today = new Date();
+  const formatStr = (d: Date) => d.toISOString().split("T")[0];
+  
+  const shortcuts = [
+    { label: "📅 Today", date: today },
+    { label: "🌅 Tomorrow", date: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+    { label: "✈️ Next Monday", date: (() => {
+      const resultDate = new Date(today);
+      resultDate.setDate(today.getDate() + ((7 - today.getDay() + 1) % 7 || 7));
+      return resultDate;
+    })() },
+  ];
+
+  return (
+    <div style={{
+      background: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
+      border: "1px solid #bbf7d0",
+      borderLeft: "4px solid #16a34a",
+      borderRadius: "10px",
+      padding: "16px",
+      margin: "8px 0",
+      width: "100%",
+      boxShadow: "0 2px 8px rgba(22, 163, 74, 0.08)",
+      color: "#14532d"
+    }}>
+      <div style={{ fontWeight: "700", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "#14532d" }}>
+        <span>📅</span> {data.title || "Select Travel Date"}
+      </div>
+      
+      <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+        {shortcuts.map((sc, idx) => {
+          const dateStr = formatStr(sc.date);
+          const isSelected = selectedDate === dateStr;
+          return (
+            <Button
+              key={idx}
+              size="small"
+              onClick={() => setSelectedDate(dateStr)}
+              style={{
+                background: isSelected ? "#16a34a" : "#fff",
+                color: isSelected ? "#fff" : "#14532d",
+                borderColor: isSelected ? "#16a34a" : "#bbf7d0",
+                borderRadius: "6px",
+                fontSize: "11px",
+                fontWeight: "600",
+                height: "26px"
+              }}
+            >
+              {sc.label} ({dateStr.slice(5)})
+            </Button>
+          );
+        })}
+      </div>
+
+      <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", gap: "6px" }}>
+        <span style={{ fontSize: "11px", color: "#166534", fontWeight: "600" }}>Choose date:</span>
+        <input
+          ref={inputRef}
+          type="date"
+          value={selectedDate || ""}
+          min={formatStr(today)}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          onClick={handleInputClick}
+          onFocus={handleInputClick}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            border: "1px solid #bbf7d0",
+            fontSize: "13px",
+            background: "#fff",
+            color: "#0f172a",
+            outline: "none",
+            cursor: "pointer",
+            boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+          }}
+        />
+      </div>
+
+      <Button
+        type="primary"
+        block
+        onClick={handleConfirm}
+        disabled={!selectedDate}
+        style={{
+          background: selectedDate ? "#16a34a" : "#cbd5e1",
+          borderColor: selectedDate ? "#16a34a" : "#cbd5e1",
+          borderRadius: "6px",
+          fontWeight: "bold",
+          fontSize: "12px",
+          height: "32px"
+        }}
+      >
+        Confirm Date
       </Button>
     </div>
   );
@@ -1775,7 +1897,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
 
                       if (isJson && parsedData !== null) {
                         // Auto-detect schema if language is "json" or not specified
-                        const knownLangs = ["flights", "tickets", "payment", "passenger-review", "seats-options", "meal-options", "options", "confirm", "ancillary-options", "checkin-declaration", "loyalty-upgrade", "flight-status", "passenger-options", "time-slider"];
+                        const knownLangs = ["flights", "tickets", "payment", "passenger-review", "seats-options", "meal-options", "options", "confirm", "ancillary-options", "checkin-declaration", "loyalty-upgrade", "flight-status", "passenger-options", "time-slider", "calendar"];
                         if (lang === "json" || lang === "" || !knownLangs.includes(lang)) {
                           if (Array.isArray(parsedData)) {
                             if (parsedData.length > 0) {
@@ -1802,6 +1924,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                               lang = "passenger-review";
                             } else if (parsedData.title && parsedData.defaults && parsedData.defaults.adults !== undefined) {
                               lang = "passenger-options";
+                            } else if (parsedData.title && (parsedData.type === "date" || parsedData.date !== undefined || parsedData.type === "calendar")) {
+                              lang = "calendar";
                             } else if (parsedData.title && parsedData.min !== undefined && parsedData.max !== undefined && parsedData.default !== undefined) {
                               lang = "time-slider";
                             } else if (parsedData.question && parsedData.yes_text && parsedData.no_text) {
@@ -1845,6 +1969,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
                               data={parsedData} 
                               onConfirm={(adults, children, infants) => {
                                 onSendMessage?.(`I want to search for flights with ${adults} adults, ${children} children, ${infants} infants`);
+                              }}
+                            />
+                          );
+                        }
+                        if (lang === "calendar") {
+                          return (
+                            <CalendarCard 
+                              data={parsedData} 
+                              onSelect={(date) => {
+                                onSendMessage?.(date);
                               }}
                             />
                           );

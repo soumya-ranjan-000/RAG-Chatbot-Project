@@ -21,7 +21,11 @@ try:
         add_ancillary,
         get_revenue_summary,
         upgrade_with_miles,
-        get_flight_status
+        get_flight_status,
+        get_all_passengers,
+        create_passenger_profile,
+        update_passenger_profile,
+        delete_passenger_profile
     )
 except ImportError:
     from db_supabase import (
@@ -44,7 +48,11 @@ except ImportError:
         add_ancillary,
         get_revenue_summary,
         upgrade_with_miles,
-        get_flight_status
+        get_flight_status,
+        get_all_passengers,
+        create_passenger_profile,
+        update_passenger_profile,
+        delete_passenger_profile
     )
 
 logger = logging.getLogger("pss-db-shim")

@@ -31,149 +31,220 @@ if not SUPABASE_URL or not SUPABASE_KEY or "your-service-role-key" in SUPABASE_K
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def get_booking(pnr: str) -> dict:
-    pnr_upper = pnr.upper()
-    logger.info(f"DB Query: Fetching booking {pnr_upper}")
+def get_bookings_batch(pnr_codes: list) -> list:
+    if not pnr_codes:
+        return []
+        
+    pnr_codes_upper = list(set(p.upper() for p in pnr_codes if p))
+    if not pnr_codes_upper:
+        return []
+        
+    logger.info(f"DB Query: Fetching bookings batch for {pnr_codes_upper}")
     
-    res_pnr = supabase.table("pss_pnrs").select("*").eq("pnr_code", pnr_upper).execute()
-    if not res_pnr.data:
-        return None
-    pnr_row = res_pnr.data[0]
-    pnr_id = pnr_row["pnr_id"]
-    primary_passenger_id = pnr_row["primary_passenger_id"]
-
-    # Get passengers in this PNR
+    # 1. PNR rows
+    res_pnrs = supabase.table("pss_pnrs").select("*").in_("pnr_code", pnr_codes_upper).execute()
+    if not res_pnrs.data:
+        return []
+        
+    pnrs_by_code = {p["pnr_code"].upper(): p for p in res_pnrs.data}
+    pnr_ids = [p["pnr_id"] for p in res_pnrs.data]
+    
+    # 2. PNR Passengers
     res_pax = supabase.table("pss_pnr_passengers")\
-        .select("passenger_id, passenger_type, is_primary")\
-        .eq("pnr_id", pnr_id)\
+        .select("pnr_id, passenger_id, passenger_type, is_primary")\
+        .in_("pnr_id", pnr_ids)\
         .execute()
         
-    pax_list = []
-    primary_pax = None
+    pax_by_pnr = {}
     for p in res_pax.data:
-        res_profile = supabase.table("pss_passengers")\
+        pnr_id_str = str(p["pnr_id"])
+        pax_by_pnr.setdefault(pnr_id_str, []).append(p)
+        
+    # 3. Passenger Profiles
+    passenger_ids = list(set(str(p["passenger_id"]) for p in res_pax.data))
+    profiles_by_uuid = {}
+    if passenger_ids:
+        res_profiles = supabase.table("pss_passengers")\
             .select("passenger_id, legacy_id, first_name, last_name, email, frequent_flyer_number")\
-            .eq("passenger_id", p["passenger_id"])\
+            .in_("passenger_id", passenger_ids)\
             .execute()
-        if res_profile.data:
-            profile = res_profile.data[0]
-            name = f"{profile['first_name']} {profile['last_name']}"
-            pax_info = {
-                "passenger_id": profile["legacy_id"] or str(profile["passenger_id"]),
-                "uuid": str(profile["passenger_id"]),
-                "name": name,
-                "first_name": profile["first_name"],
-                "last_name": profile["last_name"],
-                "email": profile["email"],
-                "frequent_flyer": profile["frequent_flyer_number"],
-                "passenger_type": p["passenger_type"],
-                "is_primary": p["is_primary"]
-            }
-            pax_list.append(pax_info)
-            if p["is_primary"] or p["passenger_id"] == primary_passenger_id:
-                primary_pax = pax_info
-
-    if not primary_pax and pax_list:
-        primary_pax = pax_list[0]
-
-    # Get segments
+        profiles_by_uuid = {str(p_row["passenger_id"]): p_row for p_row in res_profiles.data}
+        
+    # 4. Segments
     res_segs = supabase.table("pss_pnr_segments")\
         .select("*")\
-        .eq("pnr_id", pnr_id)\
+        .in_("pnr_id", pnr_ids)\
         .order("segment_number")\
         .execute()
         
-    segs_list = []
+    segs_by_pnr = {}
     for s in res_segs.data:
-        # Get flight details
-        res_flight = supabase.table("vw_flight_availability")\
-            .select("*")\
-            .eq("flight_id", s["flight_id"])\
-            .limit(1)\
-            .execute()
-            
-        flight_num = "N/A"
-        origin = "N/A"
-        destination = "N/A"
-        dep_datetime = "N/A"
-        dep_time = "N/A"
-        airline = "Apex Air"
-        gate = "B3"
+        pnr_id_str = str(s["pnr_id"])
+        segs_by_pnr.setdefault(pnr_id_str, []).append(s)
         
-        if res_flight.data:
-            f = res_flight.data[0]
-            flight_num = f.get("flight_number")
-            origin = f.get("origin")
-            destination = f.get("destination")
-            dep_datetime = f.get("departure_datetime", "")
+    # 5. Flight Details
+    flight_ids = list(set(str(s["flight_id"]) for s in res_segs.data if s.get("flight_id")))
+    flights_by_id = {}
+    if flight_ids:
+        res_flights = supabase.table("vw_flight_availability")\
+            .select("*")\
+            .in_("flight_id", flight_ids)\
+            .execute()
+        for f_row in res_flights.data:
+            flights_by_id[str(f_row["flight_id"])] = f_row
+            
+    # 6. Seat Details
+    seat_ids = [str(s["seat_id"]) for s in res_segs.data if s.get("seat_id")]
+    seats_by_id = {}
+    if seat_ids:
+        res_seats = supabase.table("pss_seat_map")\
+            .select("seat_id, seat_number, passenger_id")\
+            .in_("seat_id", seat_ids)\
+            .execute()
+        seats_by_id = {str(st["seat_id"]): st for st in res_seats.data}
+        
+    # Now construct the bookings
+    bookings_list = []
+    
+    # We want to return them in the order of requested pnr_codes (if found)
+    for pnr in pnr_codes_upper:
+        pnr_row = pnrs_by_code.get(pnr)
+        if not pnr_row:
+            continue
+            
+        pnr_id = pnr_row["pnr_id"]
+        pnr_id_str = str(pnr_id)
+        primary_passenger_id = pnr_row["primary_passenger_id"]
+        
+        # Build pax list for this PNR
+        pax_list = []
+        primary_pax = None
+        pax_rows = pax_by_pnr.get(pnr_id_str, [])
+        
+        for p in pax_rows:
+            p_uuid_str = str(p["passenger_id"])
+            profile = profiles_by_uuid.get(p_uuid_str)
+            if profile:
+                name = f"{profile['first_name']} {profile['last_name']}"
+                pax_info = {
+                    "passenger_id": profile["legacy_id"] or str(profile["passenger_id"]),
+                    "uuid": p_uuid_str,
+                    "name": name,
+                    "first_name": profile["first_name"],
+                    "last_name": profile["last_name"],
+                    "email": profile["email"],
+                    "frequent_flyer": profile["frequent_flyer_number"],
+                    "passenger_type": p["passenger_type"],
+                    "is_primary": p["is_primary"]
+                }
+                pax_list.append(pax_info)
+                if p["is_primary"] or p["passenger_id"] == primary_passenger_id:
+                    primary_pax = pax_info
+                    
+        if not primary_pax and pax_list:
+            primary_pax = pax_list[0]
+            
+        # Build segments list for this PNR
+        segs_list = []
+        seg_rows = segs_by_pnr.get(pnr_id_str, [])
+        
+        for s in seg_rows:
+            flight_id_str = str(s["flight_id"])
+            f = flights_by_id.get(flight_id_str, {})
+            
+            flight_num = f.get("flight_number") or "N/A"
+            origin = f.get("origin") or "N/A"
+            destination = f.get("destination") or "N/A"
+            dep_datetime = f.get("departure_datetime", "") or "N/A"
             dep_time = dep_datetime.split("T")[1][:5] if dep_datetime and "T" in dep_datetime else ""
             airline = f.get("airline_name") or "Apex Air"
             gate = f.get("gate") or "B3"
+            flight_status = f.get("flight_status")
             
-        # Get seat number
-        seat_num = None
-        if s.get("seat_id"):
-            res_seat = supabase.table("pss_seat_map")\
-                .select("seat_number")\
-                .eq("seat_id", s["seat_id"])\
-                .execute()
-            if res_seat.data:
-                seat_num = res_seat.data[0]["seat_number"]
+            seat_num = None
+            assigned_pax_id = None
+            if s.get("seat_id"):
+                seat_info = seats_by_id.get(str(s["seat_id"]), {})
+                seat_num = seat_info.get("seat_number")
+                pax_uuid_seat = seat_info.get("passenger_id")
+                if pax_uuid_seat:
+                    for p in pax_list:
+                        if p["uuid"] == str(pax_uuid_seat):
+                            assigned_pax_id = p["passenger_id"]
+                            break
+                            
+            segs_list.append({
+                "segment_id": s["segment_id"],
+                "flight_id": flight_id_str,
+                "flight_number": flight_num,
+                "origin": origin,
+                "destination": destination,
+                "departure_datetime": dep_datetime,
+                "departure_time": dep_time,
+                "date": dep_datetime[:10] if dep_datetime and dep_datetime != "N/A" else "N/A",
+                "gate": gate,
+                "seat": seat_num,
+                "status": s["segment_status"],
+                "airline": airline,
+                "booking_class": s["booking_class"],
+                "cabin_class": s["cabin_class"],
+                "passenger_id": assigned_pax_id,
+                "flight_status": flight_status
+            })
+            
+        first_seg = segs_list[0] if segs_list else {}
+        pnr_status = pnr_row["status"]
+        flight_id = first_seg.get("flight_id")
+        flight_status = first_seg.get("flight_status") if first_seg else None
+        
+        # Fallback for flight status if needed
+        if flight_id and not flight_status:
+            try:
+                res_f = supabase.table("pss_flights").select("status").eq("flight_id", flight_id).execute()
+                if res_f.data:
+                    flight_status = res_f.data[0].get("status")
+            except Exception as e:
+                logger.error(f"Failed to query flight status for PNR mapping: {e}")
                 
-        # Find which passenger this segment belongs to by checking who is assigned to the seat
-        assigned_pax_id = None
-        if s.get("seat_id"):
-            res_seat_pax = supabase.table("pss_seat_map").select("passenger_id").eq("seat_id", s["seat_id"]).execute()
-            if res_seat_pax.data:
-                pax_uuid_seat = res_seat_pax.data[0].get("passenger_id")
-                # find in pax_list
-                for p in pax_list:
-                    if p["uuid"] == str(pax_uuid_seat):
-                        assigned_pax_id = p["passenger_id"]
-                        break
-                        
-        segs_list.append({
-            "segment_id": s["segment_id"],
-            "flight_id": str(s["flight_id"]),
-            "flight_number": flight_num,
-            "origin": origin,
-            "destination": destination,
-            "departure_datetime": dep_datetime,
-            "departure_time": dep_time,
-            "date": dep_datetime[:10] if dep_datetime else "N/A",
-            "gate": gate,
-            "seat": seat_num,
-            "status": s["segment_status"],
-            "airline": airline,
-            "booking_class": s["booking_class"],
-            "cabin_class": s["cabin_class"],
-            "passenger_id": assigned_pax_id
-        })
+        if pnr_status == "checked_in":
+            pnr_status = "checked-in"
+        elif pnr_status == "boarded":
+            pnr_status = "boarding-pass-generated"
+        elif pnr_status == "flown":
+            if flight_status == "departed":
+                pnr_status = "departed"
+            elif flight_status == "arrived":
+                pnr_status = "completed"
+            else:
+                pnr_status = "completed"
+                
+        booking_dict = {
+            "pnr": pnr,
+            "pnr_id": str(pnr_id),
+            "status": pnr_status,
+            "total_amount": float(pnr_row["total_amount_usd"] or 0.0),
+            "passenger_id": primary_pax["passenger_id"] if primary_pax else None,
+            "passenger_name": primary_pax["name"] if primary_pax else None,
+            "flight_number": first_seg.get("flight_number"),
+            "flight_id": first_seg.get("flight_id"),
+            "origin": first_seg.get("origin"),
+            "destination": first_seg.get("destination"),
+            "date": first_seg.get("date"),
+            "gate": first_seg.get("gate"),
+            "seat": first_seg.get("seat"),
+            "airline": first_seg.get("airline"),
+            "booking_class": first_seg.get("booking_class"),
+            "cabin_class": first_seg.get("cabin_class"),
+            "passengers": pax_list,
+            "segments": segs_list
+        }
+        bookings_list.append(booking_dict)
+        
+    return bookings_list
 
-    # Fallback/Legacy properties mapping using first segment & primary passenger
-    first_seg = segs_list[0] if segs_list else {}
-    
-    booking_dict = {
-        "pnr": pnr_upper,
-        "pnr_id": str(pnr_id),
-        "status": pnr_row["status"],
-        "total_amount": float(pnr_row["total_amount_usd"] or 0.0),
-        "passenger_id": primary_pax["passenger_id"] if primary_pax else None,
-        "passenger_name": primary_pax["name"] if primary_pax else None,
-        "flight_number": first_seg.get("flight_number"),
-        "flight_id": first_seg.get("flight_id"),
-        "origin": first_seg.get("origin"),
-        "destination": first_seg.get("destination"),
-        "date": first_seg.get("date"),
-        "gate": first_seg.get("gate"),
-        "seat": first_seg.get("seat"),
-        "airline": first_seg.get("airline"),
-        "booking_class": first_seg.get("booking_class"),
-        "cabin_class": first_seg.get("cabin_class"),
-        "passengers": pax_list,
-        "segments": segs_list
-    }
-    return booking_dict
+def get_booking(pnr: str) -> dict:
+    bookings = get_bookings_batch([pnr])
+    return bookings[0] if bookings else None
 
 def map_booking(row: dict) -> dict:
     if not row:
@@ -200,7 +271,22 @@ def get_passenger_profile(passenger_id: str) -> dict:
         res = query.eq("legacy_id", passenger_id).execute()
 
     if not res.data:
-        return None
+        if passenger_id == "admin":
+            logger.info("Admin passenger profile not found, dynamically creating it...")
+            admin_row = {
+                "legacy_id": "admin",
+                "first_name": "System",
+                "last_name": "Administrator",
+                "email": "admin",
+                "frequent_flyer_number": "FF_ADMIN"
+            }
+            res_ins = supabase.table("pss_passengers").insert(admin_row).execute()
+            if res_ins.data:
+                res.data = res_ins.data
+            else:
+                return None
+        else:
+            return None
         
     pax = res.data[0]
     
@@ -211,7 +297,16 @@ def get_passenger_profile(passenger_id: str) -> dict:
     else:
         res_b = query_b.eq("legacy_id", passenger_id).execute()
         
-    bookings = [map_booking(row) for row in res_b.data]
+    # Deduplicate PNRs to prevent querying the same PNR multiple times for multi-segment itineraries
+    pnr_codes = []
+    seen_pnrs = set()
+    for row in res_b.data:
+        pnr = row.get("pnr_code")
+        if pnr and pnr not in seen_pnrs:
+            seen_pnrs.add(pnr)
+            pnr_codes.append(pnr)
+
+    bookings = get_bookings_batch(pnr_codes)
     
     return {
         "passenger_id": pax.get("legacy_id") or str(pax.get("passenger_id")),
@@ -544,10 +639,16 @@ def reschedule_booking(pnr: str, new_date: str, new_flight: str) -> dict:
     pnr_upper = pnr.upper()
     logger.info(f"DB Action: Rescheduling booking {pnr_upper} to flight {new_flight} on {new_date}")
     
-    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id").eq("pnr_code", pnr_upper).execute()
+    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id, status").eq("pnr_code", pnr_upper).execute()
     if not res_pnr.data:
         raise ValueError("Booking not found")
-    pnr_id = res_pnr.data[0]["pnr_id"]
+    
+    pnr_data = res_pnr.data[0]
+    pnr_status = pnr_data.get("status")
+    if pnr_status in ("checked_in", "checked-in", "boarded"):
+        raise ValueError("Cannot reschedule booking after check-in.")
+        
+    pnr_id = pnr_data["pnr_id"]
     pax_uuid = res_pnr.data[0]["primary_passenger_id"]
     
     res_flight = supabase.table("pss_flights").select("flight_id, flight_number, gate")\
@@ -650,10 +751,24 @@ def get_flights(origin: str = None, destination: str = None, date: str = None, t
         elif "-" in tr:
             parts = tr.split("-")
             if len(parts) == 2:
-                p0 = parts[0].strip()
-                p1 = parts[1].strip()
-                start_time = p0 + ":00" if len(p0) == 5 else p0
-                end_time = p1 + ":00" if len(p1) == 5 else p1
+                def parse_time_part(t_str: str) -> str:
+                    t_str = t_str.strip()
+                    if t_str.isdigit():
+                        return f"{int(t_str):02d}:00:00"
+                    if ":" in t_str:
+                        sub_parts = t_str.split(":")
+                        if len(sub_parts) >= 2:
+                            try:
+                                h = int(sub_parts[0])
+                                m = int(sub_parts[1])
+                                s = int(sub_parts[2]) if len(sub_parts) > 2 and sub_parts[2].isdigit() else 0
+                                return f"{h:02d}:{m:02d}:{s:02d}"
+                            except ValueError:
+                                pass
+                    return t_str
+                
+                start_time = parse_time_part(parts[0])
+                end_time = parse_time_part(parts[1])
                 
     if date:
         query = query.gte("departure_datetime", f"{date}T{start_time}").lte("departure_datetime", f"{date}T{end_time}")
@@ -726,8 +841,26 @@ def update_booking_status(pnr: str, status: str) -> dict:
         status_mapped = "confirmed"
     elif status_mapped == "pending_payment":
         status_mapped = "held"
+    elif status_mapped in ("boarding_pass_generated", "boarding_pass"):
+        status_mapped = "boarded"
+    elif status_mapped in ("departed", "completed", "landed"):
+        status_mapped = "flown"
         
     supabase.table("pss_pnrs").update({"status": status_mapped}).eq("pnr_code", pnr_upper).execute()
+    
+    # If simulation updates status to departed or completed, also update the flight status in pss_flights
+    if status.lower() in ("departed", "completed", "landed"):
+        try:
+            b = get_booking(pnr_upper)
+            if b and b.get("segments"):
+                for seg in b["segments"]:
+                    flight_id = seg.get("flight_id")
+                    if flight_id:
+                        f_status = "departed" if status.lower() == "departed" else "arrived"
+                        supabase.table("pss_flights").update({"status": f_status}).eq("flight_id", flight_id).execute()
+        except Exception as e:
+            logger.error(f"Failed to update flight status during booking status simulation: {e}")
+
     b = get_booking(pnr_upper)
     if b:
         return b
@@ -735,20 +868,22 @@ def update_booking_status(pnr: str, status: str) -> dict:
 
 def get_all_bookings() -> list:
     logger.info("DB Query: Fetching all bookings")
-    res = supabase.table("vw_passenger_itinerary").select("*").execute()
-    bookings = {}
-    for row in res.data:
-        pnr = row.get("pnr_code")
-        if pnr not in bookings:
-            bookings[pnr] = map_booking(row)
-    return list(bookings.values())
+    res = supabase.table("pss_pnrs").select("pnr_code").execute()
+    pnr_codes = [row["pnr_code"] for row in res.data if row.get("pnr_code")]
+    return get_bookings_batch(pnr_codes)
 
 def select_seat(pnr: str, passenger_id: str, seat_number: str, flight_id: str = None) -> dict:
     pnr_upper = pnr.upper()
-    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id").eq("pnr_code", pnr_upper).execute()
+    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id, status").eq("pnr_code", pnr_upper).execute()
     if not res_pnr.data:
         raise ValueError("Booking not found")
-    pnr_id = res_pnr.data[0]["pnr_id"]
+    
+    pnr_data = res_pnr.data[0]
+    pnr_status = pnr_data.get("status")
+    if pnr_status in ("checked_in", "checked-in", "boarded"):
+        raise ValueError("Cannot select or change seat after check-in.")
+        
+    pnr_id = pnr_data["pnr_id"]
     
     is_uuid = False
     try:
@@ -1094,10 +1229,16 @@ def get_seat_map(flight_id: str) -> list:
 
 def add_ssr(pnr: str, passenger_id: str, ssr_code: str, remarks: str) -> dict:
     pnr_upper = pnr.upper()
-    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id").eq("pnr_code", pnr_upper).execute()
+    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id, status").eq("pnr_code", pnr_upper).execute()
     if not res_pnr.data:
         raise ValueError("PNR not found")
-    pnr_id = res_pnr.data[0]["pnr_id"]
+    
+    pnr_data = res_pnr.data[0]
+    pnr_status = pnr_data.get("status")
+    if pnr_status in ("checked_in", "checked-in", "boarded"):
+        raise ValueError("Cannot request special service/meal after check-in.")
+        
+    pnr_id = pnr_data["pnr_id"]
     
     is_uuid = False
     try:
@@ -1146,10 +1287,16 @@ def get_loyalty_info(passenger_id: str) -> dict:
 
 def add_ancillary(pnr: str, passenger_id: str, ancillary_type: str, amount: float) -> dict:
     pnr_upper = pnr.upper()
-    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id").eq("pnr_code", pnr_upper).execute()
+    res_pnr = supabase.table("pss_pnrs").select("pnr_id, primary_passenger_id, status").eq("pnr_code", pnr_upper).execute()
     if not res_pnr.data:
         raise ValueError("PNR not found")
-    pnr_id = res_pnr.data[0]["pnr_id"]
+    
+    pnr_data = res_pnr.data[0]
+    pnr_status = pnr_data.get("status")
+    if pnr_status in ("checked_in", "checked-in", "boarded"):
+        raise ValueError("Cannot add baggage or ancillary services after check-in.")
+        
+    pnr_id = pnr_data["pnr_id"]
     
     is_uuid = False
     try:
@@ -1294,3 +1441,76 @@ def get_flight_status(flight_number: str, date: str = None) -> dict:
         "terminal": flight.get("terminal") or "N/A",
         "delay_minutes": flight.get("delay_minutes") or 0
     }
+
+def get_all_passengers() -> list:
+    res = supabase.table("pss_passengers").select("*").execute()
+    return res.data
+
+def create_passenger_profile(data: dict) -> dict:
+    # default legacy_id to something
+    legacy_id = f"usr_{uuid.uuid4().hex[:6]}"
+    row = {
+        "legacy_id": legacy_id,
+        "first_name": data.get("first_name", ""),
+        "last_name": data.get("last_name", ""),
+        "email": data.get("email", ""),
+        "phone": data.get("phone", ""),
+        "frequent_flyer_number": data.get("frequent_flyer_number", "")
+    }
+    res = supabase.table("pss_passengers").insert(row).execute()
+    return res.data[0] if res.data else None
+
+def update_passenger_profile(passenger_id: str, data: dict) -> dict:
+    is_uuid = False
+    try:
+        uuid.UUID(passenger_id)
+        is_uuid = True
+    except ValueError:
+        pass
+
+    row = {
+        "first_name": data.get("first_name", ""),
+        "last_name": data.get("last_name", ""),
+        "email": data.get("email", ""),
+        "phone": data.get("phone", ""),
+        "frequent_flyer_number": data.get("frequent_flyer_number", "")
+    }
+    
+    query = supabase.table("pss_passengers").update(row)
+    if is_uuid:
+        res = query.eq("passenger_id", passenger_id).execute()
+    else:
+        res = query.eq("legacy_id", passenger_id).execute()
+        
+    return res.data[0] if res.data else None
+
+def delete_passenger_profile(passenger_id: str) -> bool:
+    is_uuid = False
+    try:
+        uuid.UUID(passenger_id)
+        is_uuid = True
+    except ValueError:
+        pass
+
+    # First, get the passenger's UUID
+    query = supabase.table("pss_passengers").select("passenger_id")
+    if is_uuid:
+        res = query.eq("passenger_id", passenger_id).execute()
+    else:
+        res = query.eq("legacy_id", passenger_id).execute()
+        
+    if not res.data:
+        return False
+        
+    pax_uuid = res.data[0]["passenger_id"]
+    
+    # Supabase foreign keys usually have ON DELETE CASCADE.
+    # However, for bookings where this is primary passenger, they might not cascade depending on schema.
+    # Let's manually delete PNRs where this passenger is the primary.
+    res_pnrs = supabase.table("pss_pnrs").select("pnr_code").eq("primary_passenger_id", pax_uuid).execute()
+    for pnr in res_pnrs.data:
+        cancel_booking(pnr["pnr_code"])
+        
+    # Now delete the passenger profile itself
+    res_del = supabase.table("pss_passengers").delete().eq("passenger_id", pax_uuid).execute()
+    return True

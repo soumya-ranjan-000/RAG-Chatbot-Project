@@ -130,6 +130,22 @@ export const apiService = {
     });
     return response.data;
   },
+
+  /**
+   * Get application settings (model and API key configurations)
+   */
+  async getSettings(): Promise<{ model: string; openai_api_key: string; is_key_configured: boolean }> {
+    const response = await client.get("/settings");
+    return response.data;
+  },
+
+  /**
+   * Update application settings (model and API key configurations)
+   */
+  async updateSettings(settings: { model: string; openai_api_key?: string }): Promise<any> {
+    const response = await client.post("/settings", settings);
+    return response.data;
+  },
 };
 
 export default apiService;

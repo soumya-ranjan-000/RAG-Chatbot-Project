@@ -25,7 +25,18 @@ function App() {
     const saved = localStorage.getItem("airline_user_session");
     if (saved) {
       try {
-        setCurrentUser(JSON.parse(saved));
+        const session = JSON.parse(saved);
+        // Self-heal: If profile exists but is missing the 'name' field, reconstruct it
+        if (session.passengerProfile && !session.passengerProfile.name) {
+          const profile = session.passengerProfile;
+          if (profile.first_name || profile.last_name) {
+            profile.name = `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
+          } else {
+            profile.name = session.username;
+          }
+          localStorage.setItem("airline_user_session", JSON.stringify(session));
+        }
+        setCurrentUser(session);
       } catch (e) {
         console.error("Failed to parse saved login session", e);
       }
@@ -36,13 +47,21 @@ function App() {
   const handleLogin = (user: UserSession) => {
     setCurrentUser(user);
     localStorage.setItem("airline_user_session", JSON.stringify(user));
+    // Clear any leftover chat session from previous use
+    localStorage.removeItem("rag_chat_history");
+    localStorage.removeItem("rag_chat_thread_id");
+    localStorage.removeItem("agent_tool_activity");
+    localStorage.removeItem("search_history");
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem("airline_user_session");
-    // Clear chat history on logout for security
+    // Clear all session, chat, and tracking caches for security
     localStorage.removeItem("rag_chat_history");
+    localStorage.removeItem("rag_chat_thread_id");
+    localStorage.removeItem("agent_tool_activity");
+    localStorage.removeItem("search_history");
   };
 
   if (loading) {

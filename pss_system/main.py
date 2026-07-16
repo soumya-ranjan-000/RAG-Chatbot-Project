@@ -70,12 +70,46 @@ class UpgradeRequest(BaseModel):
 
 # --- Existing Endpoints ---
 
+class PassengerRequest(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone: Optional[str] = ""
+    frequent_flyer_number: Optional[str] = ""
+
+@app.get("/api/pss/passengers")
+def list_passengers():
+    return db.get_all_passengers()
+
 @app.get("/api/pss/passengers/{passenger_id}")
 def read_passenger(passenger_id: str):
     profile = db.get_passenger_profile(passenger_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Passenger not found")
     return profile
+
+@app.post("/api/pss/passengers")
+def create_passenger(req: PassengerRequest):
+    try:
+        return db.create_passenger_profile(req.model_dump())
+    except Exception as e:
+        err_msg = str(e)
+        if "unique constraint" in err_msg.lower() or "already exists" in err_msg.lower():
+            raise HTTPException(status_code=409, detail="This email is already registered.")
+        raise HTTPException(status_code=500, detail=f"Database error: {err_msg}")
+
+@app.put("/api/pss/passengers/{passenger_id}")
+def update_passenger(passenger_id: str, req: PassengerRequest):
+    res = db.update_passenger_profile(passenger_id, req.model_dump())
+    if not res:
+        raise HTTPException(status_code=404, detail="Passenger not found")
+    return res
+
+@app.delete("/api/pss/passengers/{passenger_id}")
+def delete_passenger(passenger_id: str):
+    if db.delete_passenger_profile(passenger_id):
+        return {"status": "success", "message": f"Passenger {passenger_id} deleted."}
+    raise HTTPException(status_code=404, detail="Passenger not found")
 
 @app.get("/api/pss/bookings/{pnr}")
 def read_booking(pnr: str):
@@ -112,7 +146,10 @@ def update_booking(pnr: str, req: RescheduleRequest):
     try:
         return db.reschedule_booking(pnr, req.new_date, req.new_flight)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
 
 @app.get("/api/pss/flights")
 def list_flights(origin: str = None, destination: str = None, date: str = None, time_range: str = None):

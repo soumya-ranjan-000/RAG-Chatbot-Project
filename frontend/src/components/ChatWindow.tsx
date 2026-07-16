@@ -4,7 +4,7 @@ import { SendOutlined, SettingOutlined, DeleteOutlined } from "@ant-design/icons
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { chatService, type StreamEvent } from "../services/chatService";
 import type { ChatMessage } from "../types/chat";
-import { PSS_API_URL } from "../services/api";
+import { PSS_API_URL, apiService } from "../services/api";
 
 const { Text } = Typography;
 
@@ -20,7 +20,6 @@ interface ChatWindowProps {
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ 
-
   passengerProfile,
   onBookingUpdate,
   onToolActivity
@@ -29,12 +28,44 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const [inputVal, setInputVal] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [activePnr, setActivePnr] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string>("");
+  const [modelName, setModelName] = useState<string>("gpt-4o-mini");
 
   // Settings
   const [topK, setTopK] = useState<number>(5);
   const [threshold, setThreshold] = useState<number>(0.3);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const handleSendRef = useRef<any>(null);
+
+  const generateUUID = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  };
+
+  // Load active LLM model name
+  useEffect(() => {
+    const fetchModelName = async () => {
+      try {
+        const settings = await apiService.getSettings();
+        if (settings.model) {
+          setModelName(settings.model);
+        }
+      } catch (err) {
+        console.error("Failed to load model name settings", err);
+      }
+    };
+    fetchModelName();
+
+    window.addEventListener("focus", fetchModelName);
+    return () => window.removeEventListener("focus", fetchModelName);
+  }, []);
 
   // Load message history from localStorage on mount
   useEffect(() => {
@@ -46,6 +77,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         console.error("Failed to parse saved chat history", e);
       }
     }
+
+    let savedThreadId = localStorage.getItem("rag_chat_thread_id");
+    if (!savedThreadId) {
+      savedThreadId = generateUUID();
+      localStorage.setItem("rag_chat_thread_id", savedThreadId);
+    }
+    setThreadId(savedThreadId);
   }, []);
 
   // Save message history to localStorage on change
@@ -64,6 +102,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const handleClearHistory = () => {
     setMessages([]);
     localStorage.removeItem("rag_chat_history");
+    localStorage.removeItem("rag_chat_thread_id");
+    const newThreadId = generateUUID();
+    localStorage.setItem("rag_chat_thread_id", newThreadId);
+    setThreadId(newThreadId);
     onBookingUpdate(null);
     setActivePnr(null);
   };
@@ -94,7 +136,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         }
 
         // Proceed automatically
-        handleSend(`Confirm payment status for PNR ${pnr}`);
+        if (handleSendRef.current) {
+          handleSendRef.current(`Confirm payment status for PNR ${pnr}`);
+        }
       }
     };
     window.addEventListener("message", handleWindowMessage);
@@ -140,7 +184,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             }
 
             message.success(`Payment for PNR ${activePnr} confirmed!`);
-            handleSend(`Confirm payment status for PNR ${activePnr}`);
+            if (handleSendRef.current) {
+              handleSendRef.current(`Confirm payment status for PNR ${activePnr}`);
+            }
           }
         }
       } catch (e) {
@@ -177,15 +223,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       content: "",
       timestamp: new Date().toLocaleTimeString(),
       sources: [],
-      isStreaming: true
+      isStreaming: true,
+      threadId: threadId
     };
 
     // Update messages with user's message and placeholder assistant message
     setMessages(prev => [...prev, newUserMessage, newAssistantMessage]);
 
-    // Format history in the way the API expects
-    // Note: read history from the state snapshot including the new user message
-    const historyPayload = [...messages, newUserMessage].map(msg => ({
+    // Format history in the way the API expects (history before this new query)
+    const historyPayload = messages.map(msg => ({
       role: msg.role,
       content: msg.content
     }));
@@ -224,7 +270,16 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       userQuery,
       historyPayload,
       async (event: StreamEvent) => {
-        if (event.type === "tool_call" && event.name) {
+        if (event.type === "info") {
+          console.log(`[Observability] Session Thread ID: ${event.thread_id}, Current Run ID: ${event.run_id}`);
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMsgId
+                ? { ...msg, runId: event.run_id, threadId: event.thread_id }
+                : msg
+            )
+          );
+        } else if (event.type === "tool_call" && event.name) {
           onToolActivity({
             name: event.name,
             args: event.args,
@@ -332,9 +387,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       },
       topK,
       threshold,
-      passengerProfile.passenger_id
+      passengerProfile,
+      threadId
     );
   };
+  
+  handleSendRef.current = handleSend;
 
   const handleSelectSource = (index: number) => {
     const element = document.getElementById(`chunk-card-${index}`);
@@ -479,19 +537,36 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* Input Area */}
       <div style={{ display: "flex", gap: "8px", borderTop: "1px solid #f0f0f0", paddingTop: "12px" }}>
-        <Input.TextArea
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          placeholder="Ask a question about the loaded documents..."
-          autoSize={{ minRows: 1, maxRows: 4 }}
-          onPressEnter={(e) => {
-            if (!e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          disabled={isStreaming}
-        />
+        <div className={`input-glow-wrapper ${isStreaming ? "generating-glow" : ""}`} style={{ flex: 1 }}>
+          <div className="input-glow-container">
+            <Input.TextArea
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              placeholder={isStreaming ? "Generating response..." : `Ask a question... [Model: ${modelName}]`}
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              onPressEnter={(e) => {
+                if (!e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={isStreaming}
+              style={{ borderRadius: "8px", paddingBottom: "24px" }}
+            />
+            <div style={{
+              position: "absolute",
+              bottom: "6px",
+              right: "12px",
+              fontSize: "10px",
+              color: "#94a3b8",
+              pointerEvents: "none",
+              zIndex: 4,
+              fontFamily: "monospace"
+            }}>
+              ⚡ {modelName}
+            </div>
+          </div>
+        </div>
         <Button
           type="primary"
           icon={<SendOutlined />}
@@ -500,6 +575,110 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           style={{ height: "auto" }}
         />
       </div>
+      <style>{`
+        @keyframes rotateGlow {
+          0% {
+            transform: translate(-50%, -50%) rotate(0deg);
+          }
+          100% {
+            transform: translate(-50%, -50%) rotate(360deg);
+          }
+        }
+
+        @keyframes pulseGlow {
+          0% {
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.45), 0 0 16px rgba(56, 189, 248, 0.2);
+          }
+          25% {
+            box-shadow: 0 0 8px rgba(236, 72, 153, 0.45), 0 0 16px rgba(236, 72, 153, 0.2);
+          }
+          50% {
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.45), 0 0 16px rgba(251, 191, 36, 0.2);
+          }
+          75% {
+            box-shadow: 0 0 8px rgba(168, 85, 247, 0.45), 0 0 16px rgba(168, 85, 247, 0.25);
+          }
+          100% {
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.45), 0 0 16px rgba(56, 189, 248, 0.2);
+          }
+        }
+
+        .input-glow-wrapper {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          border-radius: 10px;
+          background: transparent;
+          transition: all 0.3s ease;
+        }
+
+        .input-glow-wrapper.generating-glow {
+          animation: pulseGlow 4s linear infinite;
+        }
+
+        .input-glow-container {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          border-radius: 10px;
+          padding: 2px;
+          background: #e2e8f0;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          z-index: 2;
+          width: 100%;
+        }
+
+        .input-glow-container:focus-within {
+          background: #38bdf8;
+          box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
+        }
+
+        /* Rotating border background when generating */
+        .generating-glow .input-glow-container {
+          background: transparent !important;
+        }
+
+        .generating-glow .input-glow-container::before {
+          content: '';
+          position: absolute;
+          width: 150%;
+          height: 0;
+          padding-bottom: 150%;
+          background: conic-gradient(
+            from 0deg,
+            #38bdf8 0deg,
+            #ec4899 90deg,
+            #fbbf24 180deg,
+            #a855f7 270deg,
+            #38bdf8 360deg
+          );
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(0deg);
+          animation: rotateGlow 3s linear infinite;
+          z-index: 1;
+        }
+
+        .input-glow-container .ant-input {
+          position: relative;
+          z-index: 3;
+          border: none !important;
+          box-shadow: none !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-radius: 8px !important;
+          padding: 10px 14px !important;
+        }
+
+        .generating-glow .ant-input,
+        .generating-glow .ant-input-disabled,
+        .generating-glow .ant-input[disabled] {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          cursor: wait !important;
+        }
+      `}</style>
     </Card>
   );
 };

@@ -13,6 +13,15 @@ logger = logging.getLogger("rag-chat")
 
 # Setup OpenAI API key
 openai_api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP")
+settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+if os.path.exists(settings_path):
+    try:
+        with open(settings_path, "r") as f:
+            settings = json.load(f)
+            if settings.get("openai_api_key"):
+                openai_api_key = settings["openai_api_key"]
+    except Exception:
+        pass
 
 SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based on retrieved document context. 
 Always answer the user's question accurately and concisely using the provided context.
@@ -29,8 +38,19 @@ If the provided context does not contain the answer or is insufficient, state th
 @traceable(name="rag-chat-agent", tags=["rag", "chat"])
 def get_chat_chain(model_name: str = "gpt-4o-mini"):
     """Initialize the LangChain ChatOpenAI model and prompt template."""
-    # Ensure api key is configured
     key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP")
+    settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r") as f:
+                settings = json.load(f)
+                if settings.get("model"):
+                    model_name = settings["model"]
+                if settings.get("openai_api_key"):
+                    key = settings["openai_api_key"]
+        except Exception:
+            pass
+
     llm = ChatOpenAI(
         model=model_name,
         temperature=0.2,
@@ -58,32 +78,23 @@ async def stream_chat_response(
     history: List[Dict[str, str]],
     top_k: int = 5,
     threshold: float = 0.3,
-    passenger_id: str = "usr_94f83b"
+    passenger_profile: dict = None,
+    run_id: str = None,
+    thread_id: str = None
 ) -> AsyncGenerator[str, None]:
     """
     Invokes the Airline Booking Agent orchestrator to handle the conversation,
-    fetching PSS passenger profile context first and streaming results over SSE.
+    using the provided passenger profile context and streaming results over SSE.
     """
     try:
-        # 1. Fetch passenger profile from PSS API
-        import httpx
-        logger.info(f"Fetching passenger profile for: {passenger_id}")
-        try:
-            response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}", timeout=2.0)
-            if response.status_code == 200:
-                passenger_profile = response.json()
-            else:
-                logger.warning(f"PSS returned status {response.status_code}, using fallback profile.")
-                passenger_profile = {
-                    "passenger_id": passenger_id,
-                    "name": "Jane Smith",
-                    "email": "jane.smith@example.com",
-                    "frequent_flyer_number": "FF773910"
-                }
-        except Exception as e:
-            logger.warning(f"Could not connect to PSS API: {e}. Using fallback profile.")
+        # Yield the run_id and thread_id immediately as the first SSE event
+        yield f"data: {json.dumps({'type': 'info', 'run_id': run_id, 'thread_id': thread_id})}\n\n"
+
+        # 1. Use provided passenger profile or fallback
+        if not passenger_profile:
+            logger.warning("No passenger profile provided by frontend. Using fallback.")
             passenger_profile = {
-                "passenger_id": passenger_id,
+                "passenger_id": "usr_94f83b",
                 "name": "Jane Smith",
                 "email": "jane.smith@example.com",
                 "frequent_flyer_number": "FF773910"
@@ -95,7 +106,19 @@ async def stream_chat_response(
         usage_metadata = None
 
         # 3. Stream agent execution events
-        async for event in run_booking_agent(query, history, passenger_profile):
+        async for event in run_booking_agent(
+            query, 
+            history, 
+            passenger_profile, 
+            top_k, 
+            threshold,
+            run_id=run_id,
+            thread_id=thread_id,
+            langsmith_extra={
+                "run_id": run_id,
+                "metadata": {"thread_id": thread_id}
+            }
+        ):
             event_type = event.get("type")
             
             if event_type == "token":

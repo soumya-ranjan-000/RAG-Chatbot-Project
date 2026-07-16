@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 export interface StreamEvent {
-  type: 'sources' | 'token' | 'citations' | 'metrics' | 'done' | 'error' | 'tool_call' | 'tool_result';
+  type: 'sources' | 'token' | 'citations' | 'metrics' | 'done' | 'error' | 'tool_call' | 'tool_result' | 'info';
   content?: string;
   sources?: any[];
   citations?: any[];
@@ -10,6 +10,8 @@ export interface StreamEvent {
   name?: string;
   args?: any;
   result?: any;
+  run_id?: string;
+  thread_id?: string;
 }
 
 export const chatService = {
@@ -24,7 +26,8 @@ export const chatService = {
     onError: (error: any) => void,
     topK: number = 5,
     threshold: number = 0.3,
-    passengerId: string = "usr_94f83b"
+    passengerProfile: any = null,
+    threadId: string | null = null
   ): Promise<void> {
     try {
       const response = await fetch(`${API_URL}/chat`, {
@@ -37,7 +40,8 @@ export const chatService = {
           history,
           top_k: topK,
           threshold,
-          passenger_id: passengerId
+          passenger_profile: passengerProfile,
+          thread_id: threadId
         }),
       });
 

@@ -14,7 +14,7 @@ def check_passenger_profile(passenger_id: str) -> dict:
     Use this to identify the passenger's details.
     """
     try:
-        response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}")
+        response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}", timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": f"Passenger {passenger_id} not found."}
@@ -27,7 +27,7 @@ def check_booking_status(pnr: str) -> dict:
     Retrieves the details of a booking (origin, destination, date, flight number, seat, gate, status) using the PNR code.
     """
     try:
-        response = httpx.get(f"{PSS_API_URL}/bookings/{pnr}")
+        response = httpx.get(f"{PSS_API_URL}/bookings/{pnr}", timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": f"Booking with PNR '{pnr}' not found."}
@@ -74,7 +74,7 @@ def cancel_flight(pnr: str) -> dict:
     Cancels an active booking using its PNR code. Returns success or failure status.
     """
     try:
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/cancel")
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/cancel", timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to cancel booking.")}
@@ -95,7 +95,7 @@ def reschedule_flight(pnr: str, new_date: str, new_flight: str) -> dict:
             "new_date": new_date,
             "new_flight": new_flight
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/reschedule", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/reschedule", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to reschedule booking.")}
@@ -132,7 +132,7 @@ def check_in_passenger(pnr: str) -> dict:
     This updates the booking status to 'checked-in' and automatically issues/generates their boarding pass.
     """
     try:
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/checkin")
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/checkin", timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", f"Failed to perform check-in for PNR {pnr}.")}
@@ -146,7 +146,7 @@ def list_passenger_bookings(passenger_id: str) -> list:
     Use this to look up a passenger's PNR numbers or booking history.
     """
     try:
-        response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}")
+        response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}", timeout=20.0)
         if response.status_code == 200:
             return response.json().get("bookings", [])
         return {"error": f"Passenger {passenger_id} not found."}
@@ -182,7 +182,7 @@ def process_payment_tool(pnr: str, amount: float, payment_method: str, idempoten
             "payment_method": payment_method,
             "idempotency_key": idempotency_key
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/payment", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/payment", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to process payment.")}
@@ -200,7 +200,7 @@ def add_ssr_tool(pnr: str, passenger_id: str, ssr_code: str, remarks: str = "") 
             "ssr_code": ssr_code,
             "remarks": remarks
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/ssr", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/ssr", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to add SSR.")}
@@ -213,7 +213,7 @@ def get_loyalty_info_tool(passenger_id: str) -> dict:
     Retrieves the loyalty tier and miles balance for a passenger.
     """
     try:
-        response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}/loyalty")
+        response = httpx.get(f"{PSS_API_URL}/passengers/{passenger_id}/loyalty", timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to retrieve loyalty info.")}
@@ -229,7 +229,7 @@ def issue_ticket_tool(pnr: str, passenger_id: str) -> dict:
         payload = {
             "passenger_id": passenger_id
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/ticket", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/ticket", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to issue ticket.")}
@@ -245,7 +245,7 @@ def board_passenger_tool(pnr: str, gate: str) -> dict:
         payload = {
             "gate": gate
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/board", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/board", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to board passenger.")}
@@ -258,7 +258,7 @@ def get_seat_map_tool(flight_id: str) -> dict:
     Retrieves the seat map showing availability, row numbers, and charges for a flight.
     """
     try:
-        response = httpx.get(f"{PSS_API_URL}/flights/{flight_id}/seats")
+        response = httpx.get(f"{PSS_API_URL}/flights/{flight_id}/seats", timeout=20.0)
         if response.status_code == 200:
             seats = response.json()
             total_seats = len(seats)
@@ -298,7 +298,7 @@ def add_ancillary_tool(pnr: str, passenger_id: str, ancillary_type: str, amount:
             "ancillary_type": ancillary_type,
             "amount": amount
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/ancillary", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/ancillary", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to add ancillary.")}
@@ -319,7 +319,7 @@ def upgrade_with_miles_tool(pnr: str, passenger_id: str, required_miles: int) ->
             "passenger_id": passenger_id,
             "required_miles": required_miles
         }
-        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/upgrade", json=payload)
+        response = httpx.post(f"{PSS_API_URL}/bookings/{pnr}/upgrade", json=payload, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to upgrade flight with miles.")}
@@ -339,13 +339,16 @@ def check_flight_status_tool(flight_number: str, date: str = None) -> dict:
         params = {}
         if date:
             params["date"] = date
-        response = httpx.get(f"{PSS_API_URL}/flights/{flight_number}/status", params=params)
+        response = httpx.get(f"{PSS_API_URL}/flights/{flight_number}/status", params=params, timeout=20.0)
         if response.status_code == 200:
             return response.json()
         return {"error": response.json().get("detail", "Failed to retrieve flight status.")}
     except Exception as e:
         return {"error": f"Failed to connect to PSS: {e}"}
 
+
+from contextvars import ContextVar
+search_params_var = ContextVar("search_params", default={"top_k": 3, "threshold": 0.3})
 
 @tool
 def search_company_policy_tool(query: str) -> str:
@@ -355,7 +358,8 @@ def search_company_policy_tool(query: str) -> str:
     """
     try:
         from retrieval import search_vector_chunks
-        results = search_vector_chunks(query, top_k=3)
+        params = search_params_var.get()
+        results = search_vector_chunks(query, top_k=params["top_k"], threshold=params["threshold"])
         if not results:
             return "No relevant policy documents found."
         
@@ -365,6 +369,32 @@ def search_company_policy_tool(query: str) -> str:
             title = r.get("document_name", "Unknown Document")
             context_parts.append(f"Source: {title}\n{content}")
             
-        return "\n\n".join(context_parts)
+        import json
+        return json.dumps({
+            "text": "\n\n".join(context_parts),
+            "retrieved_chunks": [
+                {k: v for k, v in r.items() if k != "embedding"}
+                for r in results
+            ]
+        })
     except Exception as e:
         return f"Failed to retrieve policies: {e}"
+
+
+@tool
+def search_web_tool(query: str) -> str:
+    """
+    Search the internet for real-time information, general facts, external airline info, or current events.
+    Use this tool when search_company_policy_tool does not contain the answer or when the user asks for external web searches.
+    """
+    try:
+        from tools.web_search_extract import search_and_extract
+        results = search_and_extract(query, max_results=3, format="markdown")
+        if not results:
+            return "No search results found on the web."
+        
+        import json
+        return json.dumps(results, indent=2)
+    except Exception as e:
+        return f"Web search failed: {e}"
+

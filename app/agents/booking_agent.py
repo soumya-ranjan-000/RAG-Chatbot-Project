@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from typing import AsyncGenerator, List, Dict, Any
+from langsmith import traceable
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from .tools import (
@@ -23,7 +24,8 @@ from .tools import (
     add_ancillary_tool,
     upgrade_with_miles_tool,
     check_flight_status_tool,
-    search_company_policy_tool
+    search_company_policy_tool,
+    search_web_tool
 )
 
 logger = logging.getLogger("booking-agent")
@@ -48,7 +50,8 @@ tools_map = {
     "add_ancillary_tool": add_ancillary_tool,
     "upgrade_with_miles_tool": upgrade_with_miles_tool,
     "check_flight_status_tool": check_flight_status_tool,
-    "search_company_policy_tool": search_company_policy_tool
+    "search_company_policy_tool": search_company_policy_tool,
+    "search_web_tool": search_web_tool
 }
 
 SYSTEM_PROMPT = """You are the Airline Booking Agent. You help passengers manage their bookings, check flight statuses, search flights, perform online check-in, select seats, make payments, request special services (SSR), check loyalty profiles, issue e-tickets, select ancillary options (such as baggage, meals, lounge access, or Wi-Fi), and board flights.
@@ -57,7 +60,7 @@ You have access to the Passenger Service System (PSS) database via tools.
 When assisting a passenger:
 1. Identify the passenger's details using their profile (injected below).
 2. If they ask to search flights, check booking status, book, check in, cancel, reschedule a flight, select seats, request special services (SSR), add ancillaries (baggage/meals/etc.), make payments, issue e-tickets, or board flights, call the appropriate tool.
-3. If they ask questions about airline policies, rules, baggage limits, or general company information, call the search_company_policy_tool to retrieve accurate context from the knowledge base.
+3. If they ask questions about airline policies, rules, baggage limits, or general company information, call the search_company_policy_tool to retrieve accurate context from the knowledge base. If the required information is not found in company policies or if the query requires external real-time information/facts, call the search_web_tool to search the internet.
 4. Formatting flight search results:
    When showing available flights, you MUST format the flight list using a JSON array inside a ```flights code block. Each flight object MUST include a list of available fare options inside a "fares" array.
    Example:
@@ -244,6 +247,17 @@ When assisting a passenger:
     }
     ```
 
+16.5. Interactive Calendar / Date Selection:
+    Whenever you need to ask the passenger for a travel date (departure date, return date, or reschedule date) while booking, scheduling, or rescheduling, you MUST prompt them using an interactive calendar picker.
+    CRITICAL: Do NOT ask for the date in plain text, do NOT ask the user if they want to use the calendar, and do NOT combine the date request with other questions (like asking for flight preferences or seats at the same time). You MUST ask for the date alone first by outputting a ```calendar code block containing the JSON object. The block MUST start exactly with ```calendar on a new line and end with ```. If you do not format it this way, the calendar date picker will fail to render.
+    Example:
+    ```calendar
+    {
+      "title": "Select Reschedule Date",
+      "default": "2026-07-22"
+    }
+    ```
+
 17. Pre-Search Flight Flow & Round Trip Handling:
     - Before calling the `search_flights` tool:
       - You MUST first ask if the user wants to add other passengers.
@@ -265,21 +279,52 @@ When assisting a passenger:
         }
         ```
       - Always ask if they want to book a round trip. If yes, query for their return date and search return flights as well.
+
+18. Post-Check-In Restrictions:
+    Once a passenger has checked in (status is "checked_in", "checked-in", or "boarded"), airline regulations prohibit any modifications to their booking. Do NOT allow seat changes, ancillary additions (such as baggage, meals, lounge access, or Wi-Fi), special service requests (SSR), cancellations, or flight rescheduling for a checked-in booking. If a user asks to modify a checked-in flight, explain clearly that booking changes are not allowed after check-in.
 """
 
+@traceable(name="Booking Agent")
 async def run_booking_agent(
     query: str,
     history: List[Dict[str, str]],
-    passenger_profile: Dict[str, Any]
+    passenger_profile: Dict[str, Any],
+    top_k: int = 5,
+    threshold: float = 0.3,
+    run_id: str = None,
+    thread_id: str = None
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stateful agent execution loop. Streams text tokens and tool invocation events.
     """
+    from .tools import search_params_var
+    search_params_var.set({"top_k": top_k, "threshold": threshold})
+    
+    # Configure tracing for LangSmith
+    config = {}
+    if thread_id:
+        config["metadata"] = {"thread_id": thread_id}
+        config["configurable"] = {"thread_id": thread_id}
+    
+    # Load model and key from settings.json if configured
+    model_name = "gpt-4o-mini"
     key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP")
     
+    settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, "r") as f:
+                settings = json.load(f)
+                if settings.get("model"):
+                    model_name = settings["model"]
+                if settings.get("openai_api_key"):
+                    key = settings["openai_api_key"]
+        except Exception as e:
+            logger.error(f"Failed to read settings: {e}")
+
     # Initialize the LLM with bound tools
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
+        model=model_name,
         temperature=0.1,
         openai_api_key=key,
         streaming=True,
@@ -301,8 +346,12 @@ Always use this ID and details when interacting with tools on behalf of this pas
         SystemMessage(content=SYSTEM_PROMPT + passenger_context)
     ]
 
-    # Add chat history
-    for msg in history[-10:]:
+    # Add chat history (avoid duplicating the current query if it's already at the end of history)
+    history_to_add = history[-10:]
+    if history_to_add and history_to_add[-1].get("role") == "user" and history_to_add[-1].get("content") == query:
+        history_to_add = history_to_add[:-1]
+
+    for msg in history_to_add:
         role = msg.get("role")
         content = msg.get("content")
         if role == "user":
@@ -318,7 +367,7 @@ Always use this ID and details when interacting with tools on behalf of this pas
         logger.info(f"Agent executing turn {turn + 1}...")
         
         full_chunk = None
-        async for chunk in llm_with_tools.astream(messages):
+        async for chunk in llm_with_tools.astream(messages, config=config):
             if full_chunk is None:
                 full_chunk = chunk
             else:
@@ -353,7 +402,7 @@ Always use this ID and details when interacting with tools on behalf of this pas
                 tool_func = tools_map.get(name)
                 if tool_func:
                     try:
-                        result = tool_func.invoke(args)
+                        result = await tool_func.ainvoke(args, config=config)
                     except Exception as e:
                         logger.error(f"Error executing tool '{name}': {e}")
                         result = {"error": str(e)}

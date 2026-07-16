@@ -10,7 +10,7 @@ import logging
 from ingestion import process_s3_document, upload_file_to_s3, list_files_in_s3, delete_file_from_s3, get_indexed_documents
 from retrieval import search_vector_chunks
 from chat import stream_chat_response
-from typing import Dict, List, Callable, Optional, Union
+from typing import Dict, List, Callable, Optional, Union, Any
 
 # Setup logging
 logging.basicConfig(
@@ -326,16 +326,21 @@ class ChatRequest(BaseModel):
     history: List[ChatMessage] = []
     top_k: Optional[int] = 5
     threshold: Optional[float] = 0.3
-    passenger_id: Optional[str] = "usr_94f83b"
+    passenger_profile: Optional[Dict[str, Any]] = None
+    thread_id: Optional[str] = None
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     """
     Stream a chat response with document sources.
     """
-    logger.info(f"Received /chat query: '{request.query}' with {len(request.history)} history messages for passenger {request.passenger_id}")
+    logger.info(f"Received /chat query: '{request.query}' with {len(request.history)} history messages for passenger {request.passenger_profile.get('passenger_id') if request.passenger_profile else 'Unknown'}")
     
     history_list = [msg.model_dump() for msg in request.history]
+    
+    # Generate unique IDs for this execution turn
+    thread_id = request.thread_id or str(uuid.uuid4())
+    run_id = str(uuid.uuid4())
     
     return StreamingResponse(
         stream_chat_response(
@@ -343,7 +348,9 @@ async def chat_endpoint(request: ChatRequest):
             history=history_list,
             top_k=request.top_k or 5,
             threshold=request.threshold or 0.3,
-            passenger_id=request.passenger_id or "usr_94f83b"
+            passenger_profile=request.passenger_profile,
+            run_id=run_id,
+            thread_id=thread_id
         ),
         media_type="text/event-stream",
         headers={
@@ -352,4 +359,74 @@ async def chat_endpoint(request: ChatRequest):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+# --- Settings Endpoints ---
+
+class SettingsRequest(BaseModel):
+    model: str
+    openai_api_key: Optional[str] = None
+
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
+def get_persisted_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to read settings file: {e}")
+    return {}
+
+@app.get("/settings")
+async def get_settings():
+    settings = get_persisted_settings()
+    model = settings.get("model", "gpt-4o-mini")
+    key = settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP") or ""
+    # Mask key for privacy
+    masked_key = ""
+    if key:
+        if key.startswith("sk-") and len(key) > 12:
+            masked_key = f"{key[:7]}...{key[-4:]}"
+        elif len(key) > 8:
+            masked_key = f"{key[:4]}...{key[-4:]}"
+        else:
+            masked_key = "..."
+    return {
+        "model": model,
+        "openai_api_key": masked_key,
+        "is_key_configured": bool(key)
+    }
+
+@app.post("/settings")
+async def update_settings(req: SettingsRequest):
+    settings = get_persisted_settings()
+    settings["model"] = req.model
+    
+    # Check if the submitted API key is the masked version of the current active key
+    current_key = settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP") or ""
+    current_masked = ""
+    if current_key:
+        if current_key.startswith("sk-") and len(current_key) > 12:
+            current_masked = f"{current_key[:7]}...{current_key[-4:]}"
+        elif len(current_key) > 8:
+            current_masked = f"{current_key[:4]}...{current_key[-4:]}"
+        else:
+            current_masked = "..."
+            
+    # If the user updated the API key to a new value (not empty, and not the masked version)
+    if req.openai_api_key and req.openai_api_key != current_masked:
+        settings["openai_api_key"] = req.openai_api_key
+        os.environ["OPENAI_API_KEY"] = req.openai_api_key
+        
+    try:
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save settings file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save settings")
+        
+    return {"status": "success", "message": "Settings updated successfully"}
+
+
 

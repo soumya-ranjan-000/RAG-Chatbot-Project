@@ -320,7 +320,7 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
     const sortedRows = Object.keys(rowsMap).map(Number).sort((a, b) => a - b);
 
     return (
-      <div style={{ maxHeight: "300px", overflowY: "auto", padding: "16px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+      <div style={{ maxHeight: "300px", overflowY: "auto", padding: "16px", background: "var(--code-bg)", borderRadius: "8px", border: "1px solid var(--border)" }}>
         <Space style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }} size="middle">
           <Badge status="success" text="Available" />
           <Badge status="processing" text="Business" />
@@ -548,12 +548,13 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
             rowKey="pnr"
             size="small"
             style={{ background: "#fff" }}
+            scroll={{ x: 'max-content', y: 400 }}
             columns={[
               {
                 title: "PNR",
                 dataIndex: "pnr",
                 key: "pnr",
-                render: (val: string) => <code style={{ fontWeight: "bold", background: "#f5f5f5", padding: "2px 4px", borderRadius: "3px" }}>{val}</code>
+                render: (val: string) => <code style={{ fontWeight: "bold", background: "var(--code-bg)", padding: "2px 4px", borderRadius: "3px" }}>{val}</code>
               },
               {
                 title: "Passenger Name",
@@ -582,12 +583,16 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
                 render: (record: any) => {
                   const s = record.status?.toLowerCase();
                   const isCancelled = s === "cancelled";
+                  const pastCheckIn = ["checked-in", "boarding-pass-generated", "departed", "completed", "landed"].includes(s);
+                  const pastBoarding = ["boarding-pass-generated", "departed", "completed", "landed"].includes(s);
+                  const pastDeparted = ["departed", "completed", "landed"].includes(s);
+                  const pastLanded = ["completed", "landed"].includes(s);
                   
                   return (
                     <Space size={4} wrap>
                       <Button 
                         size="small" 
-                        disabled={isCancelled || s === "checked-in"}
+                        disabled={isCancelled || pastCheckIn}
                         onClick={() => handleUpdateStatus(record.pnr, "checked-in")}
                       >
                         ✔ Check In
@@ -595,15 +600,15 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
                       <Button 
                         size="small" 
                         type="dashed"
-                        disabled={isCancelled || s === "boarding-pass-generated"}
+                        disabled={isCancelled || pastBoarding}
                         onClick={() => handleUpdateStatus(record.pnr, "boarding-pass-generated")}
                       >
                         🎟 Issue Pass
                       </Button>
                       <Button 
                         size="small" 
-                        disabled={isCancelled || s === "departed"}
-                        style={{ color: "#fa8c16", borderColor: "#ffe7ba" }}
+                        disabled={isCancelled || pastDeparted}
+                        style={{ color: pastDeparted || isCancelled ? undefined : "#fa8c16", borderColor: pastDeparted || isCancelled ? undefined : "#ffe7ba" }}
                         onClick={() => handleUpdateStatus(record.pnr, "departed")}
                       >
                         🛫 Depart
@@ -611,8 +616,8 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
                       <Button 
                         size="small" 
                         type="primary"
-                        disabled={isCancelled || s === "completed" || s === "landed"}
-                        style={{ background: "#3f8600", borderColor: "#3f8600" }}
+                        disabled={isCancelled || pastLanded}
+                        style={{ background: pastLanded || isCancelled ? undefined : "#3f8600", borderColor: pastLanded || isCancelled ? undefined : "#3f8600" }}
                         onClick={() => handleUpdateStatus(record.pnr, "completed")}
                       >
                         🛬 Land Flight

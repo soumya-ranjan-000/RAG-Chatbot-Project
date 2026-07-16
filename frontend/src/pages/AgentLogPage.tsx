@@ -490,25 +490,79 @@ export const AgentLogPage: React.FC = () => {
                 </div>
 
                 {selectedLog.result !== undefined ? (
-                  <pre
-                    className="custom-scroll"
-                    style={{
-                      margin: 0,
-                      background: "#04060a",
-                      border: "1px solid #1e293b",
-                      borderRadius: "6px",
-                      padding: "16px",
-                      fontSize: "12px",
-                      color: selectedLog.status === "failed" ? "#fca5a5" : "#34d399",
-                      fontFamily: "'Fira Code', monospace",
-                      maxHeight: "450px",
-                      overflow: "auto",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {JSON.stringify(selectedLog.result, null, 2)}
-                  </pre>
+                  (() => {
+                    let parsedResult = selectedLog.result;
+                    let isRagResult = false;
+                    let chunks = [];
+                    
+                    if (typeof parsedResult === "string" && selectedLog.name === "search_company_policy_tool") {
+                      try {
+                        const parsed = JSON.parse(parsedResult);
+                        if (parsed.retrieved_chunks) {
+                          isRagResult = true;
+                          chunks = parsed.retrieved_chunks;
+                          parsedResult = parsed.text;
+                        }
+                      } catch (e) {}
+                    }
+
+                    return (
+                      <>
+                        {isRagResult && chunks.length > 0 && (
+                          <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ color: "#f8fafc", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase", display: "flex", justifyContent: "space-between" }}>
+                              <div><DatabaseOutlined style={{ marginRight: "6px" }} /> Retrieved Documents ({chunks.length} chunks)</div>
+                            </div>
+                            {chunks.map((chunk: any, i: number) => (
+                              <div key={i} style={{ background: "#0f172a", border: "1px solid #1e293b", padding: "10px", borderRadius: "6px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                                  <span style={{ color: "#38bdf8", fontWeight: "bold", fontSize: "12px" }}>{chunk.document_name || "Unknown Document"}</span>
+                                  <span style={{ color: "#10b981", fontSize: "11px", fontWeight: "bold" }}>
+                                    {chunk.similarity !== undefined ? `${(chunk.similarity * 100).toFixed(1)}% Match` : ""}
+                                  </span>
+                                </div>
+                                
+                                <div style={{ marginBottom: "8px", background: "#04060a", padding: "6px 8px", borderRadius: "4px" }}>
+                                  {Object.entries(chunk).map(([k, v]) => {
+                                    if (k === 'document_name' || k === 'similarity' || k === 'chunk_content') return null;
+                                    return (
+                                      <div key={k} style={{ fontSize: "10px", color: "#cbd5e1", marginBottom: "2px", fontFamily: "monospace" }}>
+                                        <span style={{ color: "#64748b", fontWeight: "bold" }}>{k}: </span>
+                                        {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                <div style={{ color: "#94a3b8", fontSize: "11px", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                                  {chunk.chunk_content}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <pre
+                          className="custom-scroll"
+                          style={{
+                            margin: 0,
+                            background: "#04060a",
+                            border: "1px solid #1e293b",
+                            borderRadius: "6px",
+                            padding: "16px",
+                            fontSize: "12px",
+                            color: selectedLog.status === "failed" ? "#fca5a5" : "#34d399",
+                            fontFamily: "'Fira Code', monospace",
+                            maxHeight: "450px",
+                            overflow: "auto",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-all",
+                          }}
+                        >
+                          {typeof parsedResult === "string" ? parsedResult : JSON.stringify(parsedResult, null, 2)}
+                        </pre>
+                      </>
+                    );
+                  })()
                 ) : (
                   <div
                     style={{

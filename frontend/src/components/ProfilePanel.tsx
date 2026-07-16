@@ -275,7 +275,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
     const sortedRows = Object.keys(rowsMap).map(Number).sort((a, b) => a - b);
 
     return (
-      <div style={{ maxHeight: "400px", overflowY: "auto", padding: "10px", background: "#f5f5f5", borderRadius: "8px" }}>
+      <div style={{ maxHeight: "400px", overflowY: "auto", padding: "10px", background: "var(--code-bg)", borderRadius: "8px" }}>
         {/* Seat Legend */}
         <Space style={{ marginBottom: "16px", display: "flex", justifyContent: "center" }} size="middle">
           <Badge status="success" text="Available" />
@@ -348,6 +348,10 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
     return "green";
   };
 
+  const statusLower = activeTabBooking?.status?.toLowerCase();
+  const isCancelled = statusLower === "cancelled";
+  const isCheckedInOrBoarded = statusLower === "checked-in" || statusLower === "checked_in" || statusLower === "boarded";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       {/* 1. Passenger Profile Card */}
@@ -414,12 +418,13 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
           dataSource={bookings} 
           rowKey="pnr" 
           pagination={false}
+          scroll={{ y: 280, x: "max-content" }}
           columns={[
             {
               title: "PNR Code",
               dataIndex: "pnr",
               key: "pnr",
-              render: (val: string) => <code style={{ fontWeight: "bold", background: "#f5f5f5", padding: "2px 4px", borderRadius: "3px" }}>{val}</code>
+              render: (val: string) => <code style={{ fontWeight: "bold", background: "var(--code-bg)", padding: "2px 4px", borderRadius: "3px" }}>{val}</code>
             },
             {
               title: "Flight",
@@ -465,7 +470,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
                     </Button>
                     <Button
                       size="small"
-                      disabled={isCancelled || s === "checked-in" || s === "boarding-pass-generated"}
+                      disabled={isCancelled || s === "checked-in" || s === "checked_in" || s === "boarded" || s === "boarding-pass-generated"}
                       onClick={() => handleOnlineCheckIn(record)}
                       style={{ background: "#52c41a", borderColor: "#52c41a", color: "#fff" }}
                     >
@@ -494,7 +499,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
               <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "20px" }}>
                 <Button 
                   icon={<SelectOutlined />} 
-                  disabled={activeTabBooking.status?.toLowerCase() === "cancelled"}
+                  disabled={isCancelled || isCheckedInOrBoarded}
                   onClick={() => {
                     loadSeatMap(activeTabBooking);
                     setSeatModalVisible(true);
@@ -505,7 +510,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
                 
                 <Button 
                   icon={<ShoppingOutlined />} 
-                  disabled={activeTabBooking.status?.toLowerCase() === "cancelled"}
+                  disabled={isCancelled || isCheckedInOrBoarded}
                   onClick={() => setAncillaryModalVisible(true)}
                 >
                   Add Baggage & Lounge
@@ -513,7 +518,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
 
                 <Button 
                   icon={<StarOutlined />} 
-                  disabled={activeTabBooking.status?.toLowerCase() === "cancelled"}
+                  disabled={isCancelled || isCheckedInOrBoarded}
                   onClick={() => setSsrModalVisible(true)}
                 >
                   Request Special Meal / Wheelchair
@@ -521,7 +526,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
 
                 <Button 
                   icon={<RedoOutlined />} 
-                  disabled={activeTabBooking.status?.toLowerCase() === "cancelled" || activeTabBooking.status?.toLowerCase() === "checked-in"}
+                  disabled={isCancelled || isCheckedInOrBoarded}
                   onClick={() => handleSimulateReschedule(activeTabBooking)}
                 >
                   Simulate Reschedule
@@ -529,7 +534,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
 
                 <Button 
                   danger 
-                  disabled={activeTabBooking.status?.toLowerCase() === "cancelled"}
+                  disabled={isCancelled || isCheckedInOrBoarded}
                   onClick={() => handleCancelBooking(activeTabBooking)}
                 >
                   Cancel Reservation

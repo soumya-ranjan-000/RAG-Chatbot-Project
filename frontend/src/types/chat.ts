@@ -39,6 +39,8 @@ export interface ChatMessage {
   }[];
   metrics?: ChatMetrics;
   isStreaming?: boolean;
+  runId?: string;
+  threadId?: string;
 }
 
 export interface ChatRequest {

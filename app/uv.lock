@@ -1682,6 +1682,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "supabase" },
+    { name = "tavily" },
     { name = "tiktoken" },
     { name = "uvicorn" },
 ]
@@ -1702,6 +1703,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "supabase" },
+    { name = "tavily", specifier = ">=1.1.0" },
     { name = "tiktoken", specifier = ">=0.13.0" },
     { name = "uvicorn" },
 ]
@@ -1964,6 +1966,16 @@ sdist = { url = "https://files.pythonhosted.org/packages/84/5d/61c2446ed26a57fa5
 wheels = [
     { url = "https://files.pythonhosted.org/packages/90/79/1a8162ce7d705381a4f2668c0da68e097b103c1aa701418a31da52905c7b/supabase_functions-2.31.0-py3-none-any.whl", hash = "sha256:3fdc4c4766152bfda63bdd0e286fc8a06f50e1280711fae4a1dfc9b7e9ebabc6", size = 8794, upload-time = "2026-06-04T13:37:28.022Z" },
 ]
+
+[[package]]
+name = "tavily"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/ba/cd74acdb0537a02fb5657afbd5fd5a27a298c85fc27f544912cc001377bb/tavily-1.1.0.tar.gz", hash = "sha256:7730bf10c925dc0d0d84f27a8979de842ecf88c2882183409addd855e27d8fab", size = 5081, upload-time = "2025-10-31T09:32:40.555Z" }
 
 [[package]]
 name = "tenacity"
