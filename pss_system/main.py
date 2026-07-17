@@ -243,5 +243,12 @@ def get_flight_status_endpoint(flight_number: str, date: str = None):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/api/pss/admin/clear-database")
+def clear_database_endpoint():
+    try:
+        return db.clear_booking_data()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear database: {str(e)}")
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

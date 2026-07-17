@@ -364,8 +364,18 @@ async def chat_endpoint(request: ChatRequest):
 # --- Settings Endpoints ---
 
 class SettingsRequest(BaseModel):
-    model: str
+    env: Optional[str] = None
+    local_service_provider: Optional[str] = None
+    local_model: Optional[str] = None
+    lmstudio_api_base: Optional[str] = None
+    prod_service_provider: Optional[str] = None
+    prod_model: Optional[str] = None
     openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    
+    # Backward compatibility
+    model: Optional[str] = None
 
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 
@@ -378,47 +388,89 @@ def get_persisted_settings():
             logger.error(f"Failed to read settings file: {e}")
     return {}
 
+def mask_api_key(key: Optional[str]) -> str:
+    if not key:
+        return ""
+    if key.startswith("sk-") and len(key) > 12:
+        return f"{key[:7]}...{key[-4:]}"
+    if len(key) > 8:
+        return f"{key[:4]}...{key[-4:]}"
+    return "..."
+
 @app.get("/settings")
 async def get_settings():
     settings = get_persisted_settings()
-    model = settings.get("model", "gpt-4o-mini")
-    key = settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP") or ""
-    # Mask key for privacy
-    masked_key = ""
-    if key:
-        if key.startswith("sk-") and len(key) > 12:
-            masked_key = f"{key[:7]}...{key[-4:]}"
-        elif len(key) > 8:
-            masked_key = f"{key[:4]}...{key[-4:]}"
-        else:
-            masked_key = "..."
+    env = settings.get("env", "prod")
+    
+    # Resolve backward-compatible model field
+    if env == "local":
+        model = settings.get("local_model", "qwen2.5-7b-instruct")
+    else:
+        model = settings.get("prod_model", settings.get("model", "gpt-4o-mini"))
+        
+    openai_key = settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP") or ""
+    anthropic_key = settings.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY") or ""
+    gemini_key = settings.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY") or ""
+
     return {
+        "env": env,
+        "local_service_provider": settings.get("local_service_provider", "LMStudio"),
+        "local_model": settings.get("local_model", "qwen2.5-7b-instruct"),
+        "lmstudio_api_base": settings.get("lmstudio_api_base", "http://localhost:1234/v1"),
+        "prod_service_provider": settings.get("prod_service_provider", "openai"),
+        "prod_model": settings.get("prod_model", settings.get("model", "gpt-4o-mini")),
+        
+        # Backward-compatible fields
         "model": model,
-        "openai_api_key": masked_key,
-        "is_key_configured": bool(key)
+        "openai_api_key": mask_api_key(openai_key),
+        "anthropic_api_key": mask_api_key(anthropic_key),
+        "gemini_api_key": mask_api_key(gemini_key),
+        "is_key_configured": bool(openai_key)
     }
 
 @app.post("/settings")
 async def update_settings(req: SettingsRequest):
     settings = get_persisted_settings()
-    settings["model"] = req.model
     
-    # Check if the submitted API key is the masked version of the current active key
-    current_key = settings.get("openai_api_key") or os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP") or ""
-    current_masked = ""
-    if current_key:
-        if current_key.startswith("sk-") and len(current_key) > 12:
-            current_masked = f"{current_key[:7]}...{current_key[-4:]}"
-        elif len(current_key) > 8:
-            current_masked = f"{current_key[:4]}...{current_key[-4:]}"
-        else:
-            current_masked = "..."
-            
-    # If the user updated the API key to a new value (not empty, and not the masked version)
-    if req.openai_api_key and req.openai_api_key != current_masked:
-        settings["openai_api_key"] = req.openai_api_key
-        os.environ["OPENAI_API_KEY"] = req.openai_api_key
+    if req.env is not None:
+        settings["env"] = req.env
+    if req.local_service_provider is not None:
+        settings["local_service_provider"] = req.local_service_provider
+    if req.local_model is not None:
+        settings["local_model"] = req.local_model
+    if req.lmstudio_api_base is not None:
+        settings["lmstudio_api_base"] = req.lmstudio_api_base
+    if req.prod_service_provider is not None:
+        settings["prod_service_provider"] = req.prod_service_provider
+    if req.prod_model is not None:
+        settings["prod_model"] = req.prod_model
         
+    # Map backward compatible `model` parameter if present
+    if req.model is not None:
+        settings["model"] = req.model
+        env_to_use = req.env or settings.get("env", "prod")
+        if env_to_use == "local":
+            settings["local_model"] = req.model
+        else:
+            settings["prod_model"] = req.model
+
+    # Helper to check and update specific keys
+    def update_key(field_name: str, env_var_name: str, submitted_value: Optional[str]):
+        if submitted_value is None:
+            return
+            
+        current_key = settings.get(field_name) or os.environ.get(env_var_name) or ""
+        current_masked = mask_api_key(current_key)
+        
+        if submitted_value and submitted_value != current_masked:
+            settings[field_name] = submitted_value
+            os.environ[env_var_name] = submitted_value
+            logger.info(f"Updated setting '{field_name}' and env var '{env_var_name}'")
+
+    update_key("openai_api_key", "OPENAI_API_KEY", req.openai_api_key)
+    update_key("anthropic_api_key", "ANTHROPIC_API_KEY", req.anthropic_api_key)
+    update_key("gemini_api_key", "GEMINI_API_KEY", req.gemini_api_key)
+
     try:
         with open(SETTINGS_FILE, "w") as f:
             json.dump(settings, f, indent=2)

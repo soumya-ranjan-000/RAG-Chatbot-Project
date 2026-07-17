@@ -1821,7 +1821,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = React.memo(({ message, on
               fontWeight: 500
             }}
           >
-            {isUser ? "You" : "RAG Assistant"}
+            {isUser ? "You" : "Apex Agent"}
           </Text>
 
           {/* Bubble */}

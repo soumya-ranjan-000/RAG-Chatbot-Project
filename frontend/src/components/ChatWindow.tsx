@@ -78,12 +78,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       }
     }
 
-    let savedThreadId = localStorage.getItem("rag_chat_thread_id");
-    if (!savedThreadId) {
-      savedThreadId = generateUUID();
-      localStorage.setItem("rag_chat_thread_id", savedThreadId);
-    }
-    setThreadId(savedThreadId);
+    // Set a new thread ID in memory on component mount (not cached in localStorage)
+    const newThreadId = generateUUID();
+    setThreadId(newThreadId);
   }, []);
 
   // Save message history to localStorage on change
@@ -104,7 +101,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     localStorage.removeItem("rag_chat_history");
     localStorage.removeItem("rag_chat_thread_id");
     const newThreadId = generateUUID();
-    localStorage.setItem("rag_chat_thread_id", newThreadId);
     setThreadId(newThreadId);
     onBookingUpdate(null);
     setActivePnr(null);
@@ -304,7 +300,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             if (event.result && !event.result.error) {
               onBookingUpdate(event.result);
               if (event.result.pnr) {
-                setActivePnr(event.result.pnr);
+                if (event.result.status === "pending-payment" || event.result.status === "held") {
+                  setActivePnr(event.result.pnr);
+                } else {
+                  setActivePnr(null);
+                }
               }
             }
           } else if (event.name === "cancel_flight") {
@@ -482,7 +482,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         {messages.length === 0 ? (
           <div style={{ margin: "auto", textAlign: "center", color: "#475569", maxWidth: "80%", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
             <span style={{ fontSize: "40px" }}>🤖</span>
-            <h3 style={{ fontSize: "16px", fontWeight: "bold", margin: 0, color: "#0f172a" }}>Airline Booking Assistant</h3>
+            <h3 style={{ fontSize: "16px", fontWeight: "bold", margin: 0, color: "#0f172a" }}>Apex Agent</h3>
             <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 12px 0" }}>
               Welcome! Please select one of the available options below to get started immediately, or type your query in the chat box.
             </p>

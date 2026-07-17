@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { 
   Card, Form, Input, Button, Select, Table, Tag, 
-  DatePicker, Modal, message, Space, Typography, Steps, Alert, Row, Col, Badge
+  DatePicker, Modal, message, Space, Typography, Steps, Alert, Row, Col, Badge, Popconfirm
 } from "antd";
 import { 
   SearchOutlined, CreditCardOutlined, CheckCircleOutlined, 
-  ArrowRightOutlined, ToolOutlined, UserOutlined, MailOutlined, NumberOutlined
+  ArrowRightOutlined, ToolOutlined, UserOutlined, MailOutlined, NumberOutlined, DeleteOutlined
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { PSS_API_URL } from "../services/api";
@@ -55,6 +55,7 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
   const [allBookings, setAllBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [adminNameFilter, setAdminNameFilter] = useState<string>("");
+  const [clearingData, setClearingData] = useState(false);
 
   // Fetch flights
   const fetchFlights = async (origin = "", destination = "") => {
@@ -292,6 +293,27 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
     }
   };
 
+  const handleClearAllData = async () => {
+    setClearingData(true);
+    try {
+      const res = await fetch(`${PSS_API_URL}/admin/clear-database`, {
+        method: "POST"
+      });
+
+      if (res.ok) {
+        message.success("All booking related data successfully cleared!");
+        fetchAllBookings();
+      } else {
+        const err = await res.json();
+        message.error(err.detail || "Failed to clear database booking data.");
+      }
+    } catch (e) {
+      message.error("Failed to connect to API server");
+    } finally {
+      setClearingData(false);
+    }
+  };
+
   const getStatusTag = (status: string) => {
     const s = status?.toLowerCase();
     switch (s) {
@@ -526,9 +548,34 @@ export const BookingPortal: React.FC<BookingPortalProps> = ({ currentUser, onBoo
             boxShadow: "0 4px 12px rgba(0,0,0,0.05)" 
           }}
           extra={
-            <Button size="small" onClick={fetchAllBookings} type="dashed">
-              Refresh Bookings
-            </Button>
+            <Space>
+              <Button size="small" onClick={fetchAllBookings} type="dashed">
+                Refresh Bookings
+              </Button>
+              <Popconfirm
+                title="Clear all booking data?"
+                description="This will delete all bookings, tickets, payments, ancillaries, special requests (SSRs), and reset all seat assignments/flight inventory."
+                onConfirm={handleClearAllData}
+                okText="Yes, Clear Data"
+                cancelText="Cancel"
+                okButtonProps={{ danger: true, loading: clearingData }}
+              >
+                <Button 
+                  size="small" 
+                  type="primary" 
+                  danger 
+                  loading={clearingData}
+                  icon={<DeleteOutlined />}
+                  style={{ 
+                    borderRadius: "6px",
+                    fontWeight: "500",
+                    boxShadow: "0 2px 4px rgba(255, 77, 79, 0.2)" 
+                  }}
+                >
+                  Clear Booking Data
+                </Button>
+              </Popconfirm>
+            </Space>
           }
         >
           <div style={{ display: "flex", gap: "16px", marginBottom: "16px", alignItems: "center" }}>

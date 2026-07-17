@@ -1,3 +1,11 @@
 {
-  "model": "gpt-4o"
+  "env": "prod",
+  "local_service_provider": "LMStudio",
+  "local_model": "qwen/qwen3.5-9b",
+  "lmstudio_api_base": "http://localhost:1234/v1",
+  "prod_service_provider": "openai",
+  "prod_model": "gpt-4o",
+  "openai_api_key": "",
+  "anthropic_api_key": "",
+  "gemini_api_key": ""
 }

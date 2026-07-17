@@ -1514,3 +1514,119 @@ def delete_passenger_profile(passenger_id: str) -> bool:
     # Now delete the passenger profile itself
     res_del = supabase.table("pss_passengers").delete().eq("passenger_id", pax_uuid).execute()
     return True
+
+def clear_booking_data() -> dict:
+    logger.info("DB Action: Clearing all booking-related data from database.")
+    
+    results = {}
+    
+    # 1. Delete coupons
+    try:
+        res = supabase.table("pss_coupons").delete().neq("coupon_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["coupons_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting coupons: {e}")
+        results["coupons_error"] = str(e)
+        
+    # 2. Delete tickets
+    try:
+        res = supabase.table("pss_tickets").delete().neq("ticket_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["tickets_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting tickets: {e}")
+        results["tickets_error"] = str(e)
+        
+    # 3. Delete payments
+    try:
+        res = supabase.table("pss_payments").delete().neq("payment_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["payments_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting payments: {e}")
+        results["payments_error"] = str(e)
+        
+    # 4. Delete ancillaries
+    try:
+        res = supabase.table("pss_ancillaries").delete().neq("ancillary_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["ancillaries_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting ancillaries: {e}")
+        results["ancillaries_error"] = str(e)
+        
+    # 5. Delete SSRs
+    try:
+        res = supabase.table("pss_ssrs").delete().neq("ssr_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["ssrs_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting SSRs: {e}")
+        results["ssrs_error"] = str(e)
+        
+    # 6. Delete PNR segments
+    try:
+        res = supabase.table("pss_pnr_segments").delete().neq("segment_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["segments_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting segments: {e}")
+        results["segments_error"] = str(e)
+        
+    # 7. Delete PNR passengers
+    try:
+        res = supabase.table("pss_pnr_passengers").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        results["pnr_passengers_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting PNR passengers: {e}")
+        results["pnr_passengers_error"] = str(e)
+        
+    # 8. Reset Seat Map bookings (Must be done before deleting PNRs to satisfy foreign key constraints)
+    try:
+        res_seats = supabase.table("pss_seat_map").select("seat_id").or_("is_occupied.eq.true,pnr_id.not.is.null").execute()
+        if res_seats.data:
+            seat_ids = [s["seat_id"] for s in res_seats.data]
+            results["seats_reset"] = len(seat_ids)
+            for i in range(0, len(seat_ids), 100):
+                batch = seat_ids[i:i+100]
+                supabase.table("pss_seat_map").update({
+                    "is_occupied": False,
+                    "passenger_id": None,
+                    "pnr_id": None
+                }).in_("seat_id", batch).execute()
+        else:
+            results["seats_reset"] = 0
+    except Exception as e:
+        logger.error(f"Error resetting seat map: {e}")
+        results["seats_error"] = str(e)
+        
+    # 9. Delete PNRs
+    try:
+        res = supabase.table("pss_pnrs").delete().neq("pnr_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["pnrs_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting PNRs: {e}")
+        results["pnrs_error"] = str(e)
+        
+    # 10. Reset flight inventory sold/blocked seats
+    try:
+        res_inv = supabase.table("pss_inventory").select("inventory_id, total_seats").or_("sold_seats.gt.0,blocked_seats.gt.0,waitlisted_seats.gt.0").execute()
+        if res_inv.data:
+            results["inventory_items_reset"] = len(res_inv.data)
+            for item in res_inv.data:
+                supabase.table("pss_inventory").update({
+                    "available_seats": item["total_seats"],
+                    "sold_seats": 0,
+                    "blocked_seats": 0,
+                    "waitlisted_seats": 0
+                }).eq("inventory_id", item["inventory_id"]).execute()
+        else:
+            results["inventory_items_reset"] = 0
+    except Exception as e:
+        logger.error(f"Error resetting inventory: {e}")
+        results["inventory_error"] = str(e)
+        
+    # 11. Delete Audit Log
+    try:
+        res = supabase.table("pss_audit_log").delete().neq("log_id", "00000000-0000-0000-0000-000000000000").execute()
+        results["audit_logs_deleted"] = len(res.data) if res.data else 0
+    except Exception as e:
+        logger.error(f"Error deleting audit logs: {e}")
+        results["audit_logs_error"] = str(e)
+        
+    return {"status": "success", "message": "Database booking data cleared.", "details": results}

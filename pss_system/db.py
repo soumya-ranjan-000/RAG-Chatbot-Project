@@ -25,7 +25,8 @@ try:
         get_all_passengers,
         create_passenger_profile,
         update_passenger_profile,
-        delete_passenger_profile
+        delete_passenger_profile,
+        clear_booking_data
     )
 except ImportError:
     from db_supabase import (
@@ -52,7 +53,8 @@ except ImportError:
         get_all_passengers,
         create_passenger_profile,
         update_passenger_profile,
-        delete_passenger_profile
+        delete_passenger_profile,
+        clear_booking_data
     )
 
 logger = logging.getLogger("pss-db-shim")

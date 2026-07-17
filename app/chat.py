@@ -37,27 +37,9 @@ If the provided context does not contain the answer or is insufficient, state th
 
 @traceable(name="rag-chat-agent", tags=["rag", "chat"])
 def get_chat_chain(model_name: str = "gpt-4o-mini"):
-    """Initialize the LangChain ChatOpenAI model and prompt template."""
-    key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP")
-    settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
-    if os.path.exists(settings_path):
-        try:
-            with open(settings_path, "r") as f:
-                settings = json.load(f)
-                if settings.get("model"):
-                    model_name = settings["model"]
-                if settings.get("openai_api_key"):
-                    key = settings["openai_api_key"]
-        except Exception:
-            pass
-
-    llm = ChatOpenAI(
-        model=model_name,
-        temperature=0.2,
-        openai_api_key=key,
-        streaming=True,
-        stream_options={"include_usage": True}
-    )
+    """Initialize the LangChain ChatModel and prompt template based on settings.json."""
+    from llm_factory import get_llm
+    llm = get_llm(temperature=0.2, streaming=True)
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
         ("system", "Context from documents:\n{context}"),

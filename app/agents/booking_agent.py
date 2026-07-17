@@ -54,7 +54,7 @@ tools_map = {
     "search_web_tool": search_web_tool
 }
 
-SYSTEM_PROMPT = """You are the Airline Booking Agent. You help passengers manage their bookings, check flight statuses, search flights, perform online check-in, select seats, make payments, request special services (SSR), check loyalty profiles, issue e-tickets, select ancillary options (such as baggage, meals, lounge access, or Wi-Fi), and board flights.
+SYSTEM_PROMPT = """You are the Apex Agent. You help passengers manage their bookings, check flight statuses, search flights, perform online check-in, select seats, make payments, request special services (SSR), check loyalty profiles, issue e-tickets, select ancillary options (such as baggage, meals, lounge access, or Wi-Fi), and board flights.
 You have access to the Passenger Service System (PSS) database via tools.
 
 When assisting a passenger:
@@ -284,7 +284,7 @@ When assisting a passenger:
     Once a passenger has checked in (status is "checked_in", "checked-in", or "boarded"), airline regulations prohibit any modifications to their booking. Do NOT allow seat changes, ancillary additions (such as baggage, meals, lounge access, or Wi-Fi), special service requests (SSR), cancellations, or flight rescheduling for a checked-in booking. If a user asks to modify a checked-in flight, explain clearly that booking changes are not allowed after check-in.
 """
 
-@traceable(name="Booking Agent")
+@traceable(name="Apex Agent")
 async def run_booking_agent(
     query: str,
     history: List[Dict[str, str]],
@@ -306,30 +306,9 @@ async def run_booking_agent(
         config["metadata"] = {"thread_id": thread_id}
         config["configurable"] = {"thread_id": thread_id}
     
-    # Load model and key from settings.json if configured
-    model_name = "gpt-4o-mini"
-    key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY_TEMP")
-    
-    settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
-    if os.path.exists(settings_path):
-        try:
-            with open(settings_path, "r") as f:
-                settings = json.load(f)
-                if settings.get("model"):
-                    model_name = settings["model"]
-                if settings.get("openai_api_key"):
-                    key = settings["openai_api_key"]
-        except Exception as e:
-            logger.error(f"Failed to read settings: {e}")
-
-    # Initialize the LLM with bound tools
-    llm = ChatOpenAI(
-        model=model_name,
-        temperature=0.1,
-        openai_api_key=key,
-        streaming=True,
-        stream_options={"include_usage": True}
-    )
+    # Initialize the LLM using the factory
+    from llm_factory import get_llm
+    llm = get_llm(temperature=0.1, streaming=True)
     llm_with_tools = llm.bind_tools(list(tools_map.values()))
 
     # Build prompt messages
