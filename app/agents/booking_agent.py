@@ -1,4 +1,5 @@
 import os
+import datetime
 import json
 import logging
 from typing import AsyncGenerator, List, Dict, Any
@@ -312,12 +313,15 @@ async def run_booking_agent(
     llm_with_tools = llm.bind_tools(list(tools_map.values()))
 
     # Build prompt messages
+    current_date = datetime.date.today().isoformat()
     passenger_context = f"""
 Current Logged-in Passenger:
 - ID: {passenger_profile.get('passenger_id', 'unknown')}
 - Name: {passenger_profile.get('name', 'Unknown')}
 - Email: {passenger_profile.get('email', 'Unknown')}
 - Frequent Flyer Number: {passenger_profile.get('frequent_flyer_number', 'None')}
+
+Current Date: {current_date}
 
 Always use this ID and details when interacting with tools on behalf of this passenger.
 """
