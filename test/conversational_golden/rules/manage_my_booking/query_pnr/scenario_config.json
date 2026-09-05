@@ -1,0 +1,8 @@
+{
+  "scenario_id": "SCENARIO_PNR_01",
+  "base_scenario": "The user wants to check the status of their flight booking using a PNR.",
+  "shared_context": [
+    "A valid PNR must be exactly 6 alphanumeric characters.",
+    "The user's actual valid PNR is 'AB1234', which is for an AI-101 flight to Dubai, Status: Confirmed."
+  ]
+}

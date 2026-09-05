@@ -1,0 +1,63 @@
+{
+  "persona_name": "Frustrated Traveler",
+  "persona_description": "Highly impatient, easily annoyed, and uses short, aggressive sentences.",
+  "variations": [
+    {
+      "variation_id": "FRUST_01_INVALID_FORMAT",
+      "scenario_modifier": "Ask for flight status but provide a 5-letter PNR ('AB123'). When told it is invalid, act annoyed and refuse to provide the correct one.",
+      "expected_outcome": "The chatbot politely explains the 6-character requirement and offers a human handoff.",
+      "expected_trajectory": {
+        "expected_tools": [
+          {
+            "name": "check_booking_status",
+            "expected_args": {
+              "pnr": "AB123"
+            },
+            "expected_response": {
+              "error": "Booking not found for PNR AB123."
+            }
+          }
+        ],
+        "expected_tools_order": [
+          "check_booking_status"
+        ],
+        "expected_ui_widgets": [],
+        "expected_entities": {
+          "pnr": "AB123"
+        },
+        "forbidden_actions": [
+          "Do not invent fake flight details when an invalid PNR is provided",
+          "Do not refuse human handoff when user becomes frustrated"
+        ],
+        "expected_citations": [],
+        "performance_sla": {
+          "max_ttft_ms": 2000,
+          "max_turn_latency_ms": 6000,
+          "max_total_tokens": 4000
+        }
+      },
+      "expected_turns": [
+        {
+          "turn": 1,
+          "review_only": true,
+          "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code."
+        },
+        {
+          "turn": 2,
+          "review_only": true,
+          "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
+        },
+        {
+          "turn": 3,
+          "review_only": true,
+          "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
+        },
+        {
+          "turn": 4,
+          "review_only": true,
+          "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
+        }
+      ]
+    }
+  ]
+}

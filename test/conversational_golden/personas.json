@@ -1,0 +1,187 @@
+{
+  "version": "1.1",
+  "description": "Central catalog of user personas used for conversational golden rule variations. QA engineers can edit, update, or add personas to this file to expand testing profiles across scenarios.",
+  "personas": [
+    {
+      "persona_slug": "normal_direct",
+      "persona_name": "Normal Direct Traveler",
+      "persona_description": "Calm, cooperative, clear, and provides details promptly when requested.",
+      "behavioral_traits": [
+        "Provides requested parameters (dates, airport codes, PNRs) clearly and accurately",
+        "Follows the happy path without unnecessary hesitation or complaints",
+        "Confirms actions promptly when presented with confirmation dialogs"
+      ],
+      "recommended_for": [
+        "Happy path feature verification",
+        "Baseline regression tests",
+        "Deterministic replay scripts"
+      ]
+    },
+    {
+      "persona_slug": "frustrated_traveler",
+      "persona_name": "Frustrated Traveler",
+      "persona_description": "Highly impatient, easily annoyed, and uses short, aggressive sentences.",
+      "behavioral_traits": [
+        "Enters invalid or malformed data (e.g., 5-character PNR, expired dates)",
+        "Complains about delays, rigid rules, or repeated questioning",
+        "Demands human agent escalation or supervisor handoff when encountering errors"
+      ],
+      "recommended_for": [
+        "Error handling and input validation testing",
+        "De-escalation and empathy policy checks",
+        "Negative constraints and handoff triggers"
+      ]
+    },
+    {
+      "persona_slug": "confused_first_timer",
+      "persona_name": "Confused First-Time Traveler",
+      "persona_description": "Unfamiliar with airline booking procedures, unsure what a PNR or fare class is, asks clarifying questions, and requires step-by-step guidance.",
+      "behavioral_traits": [
+        "Asks what acronyms (PNR, SSR, Fare Class) mean before taking action",
+        "Requests help choosing between options (e.g. Economy Light vs Flex)",
+        "Provides partial information and needs proactive bot prompting"
+      ],
+      "recommended_for": [
+        "Guidance and conversational relevancy checks",
+        "Proactive options chips and instructional flow verification",
+        "Multi-turn context retention"
+      ]
+    },
+    {
+      "persona_slug": "business_corporate_traveler",
+      "persona_name": "Business Corporate Traveler",
+      "persona_description": "Fast-paced executive traveling on corporate business, focused on speed, flexible fares, invoice generation, and loyalty miles/upgrades.",
+      "behavioral_traits": [
+        "Prefers Business Class or Economy Flex refundable fares",
+        "Frequently queries loyalty tier balance and miles upgrade options",
+        "Demands quick e-ticket receipts and clear breakdown of expenses"
+      ],
+      "recommended_for": [
+        "Loyalty and miles upgrade features",
+        "Rescheduling and flexible cancellation flows",
+        "Corporate invoice and ancillary purchase verification"
+      ]
+    },
+    {
+      "persona_slug": "family_group_traveler",
+      "persona_name": "Family & Group Traveler",
+      "persona_description": "Traveler booking or managing flights for a family or group with adults, children, and infants, requiring adjacent seating and special requests.",
+      "behavioral_traits": [
+        "Submits multiple passengers in a single booking (ADT, CHD, INF)",
+        "Requests adjacent seats using visual seat map options",
+        "Adds Special Service Requests (SSR) such as child meals (CHML) and extra baggage"
+      ],
+      "recommended_for": [
+        "Multi-passenger booking flows",
+        "Seat selection and seat map widgets",
+        "SSR and ancillary baggage add-ons"
+      ]
+    },
+    {
+      "persona_slug": "budget_bargain_hunter",
+      "persona_name": "Budget Bargain Hunter",
+      "persona_description": "Price-sensitive traveler looking for the lowest fare, inquiring about hidden baggage fees and refund penalties before committing.",
+      "behavioral_traits": [
+        "Compares fare classes and insists on the lowest price option",
+        "Asks detailed questions about baggage allowances and change fees",
+        "Hesitates before payment to verify total cost transparency"
+      ],
+      "recommended_for": [
+        "Fare options comparison blocks",
+        "Policy retrieval for baggage and cancellation fees",
+        "Payment block transparency"
+      ]
+    },
+    {
+      "persona_slug": "accessibility_special_needs",
+      "persona_name": "Accessibility & Special Needs Traveler",
+      "persona_description": "Passenger requiring special accessibility services (wheelchair, medical equipment, service animal assistance) during their flight.",
+      "behavioral_traits": [
+        "Explicitly requests wheelchair assistance (WCHR) or mobility accommodations",
+        "Inquires about gate transfer support and pre-boarding policies",
+        "Verifies that accessibility requests are logged in booking SSR"
+      ],
+      "recommended_for": [
+        "Special Service Requests (add_ssr_tool)",
+        "Airline safety and accessibility policy compliance",
+        "Check-in and boarding assistance flows"
+      ]
+    },
+    {
+      "persona_slug": "disrupted_flight_passenger",
+      "persona_name": "Disrupted Flight Passenger",
+      "persona_description": "Stressed passenger whose flight is heavily delayed or cancelled, inquiring about alternative flights, meal/hotel vouchers, and refund options.",
+      "behavioral_traits": [
+        "Expresses urgency and anxiety about missed connecting flights",
+        "Asks for compensation policies, meal vouchers, and overnight accommodations",
+        "Demands immediate rebooking without additional fare difference charges"
+      ],
+      "recommended_for": [
+        "Flight delay / cancellation handling",
+        "Irregular operations (IROPS) rebooking flows",
+        "Company policy retrieval for compensation and hotel accommodations"
+      ]
+    },
+    {
+      "persona_slug": "last_minute_rush_traveler",
+      "persona_name": "Last-Minute Rush Traveler",
+      "persona_description": "Traveler in a severe rush at or en route to the airport, needing rapid check-in, immediate gate directions, or urgent standby assistance.",
+      "behavioral_traits": [
+        "Uses ultra-short, clipped messages like 'check in quick' or 'which gate'",
+        "Skips pleasantries and demands immediate action",
+        "Prone to panic if safety declarations or seat selections add friction"
+      ],
+      "recommended_for": [
+        "Fast-path check-in and boarding pass retrieval",
+        "SLA and Time-To-First-Token (TTFT) stress testing",
+        "Gate and flight status quick-lookup flows"
+      ]
+    },
+    {
+      "persona_slug": "frequent_flyer_elite",
+      "persona_name": "Frequent Flyer Elite VIP",
+      "persona_description": "High-tier Platinum/Diamond loyalty member expecting recognition, lounge access, priority baggage, and complimentary upgrades.",
+      "behavioral_traits": [
+        "Mentions frequent flyer number and elite status early in conversation",
+        "Asks for lounge access locations and business class upgrade availability",
+        "Expects VIP recognition and premium handling by the assistant"
+      ],
+      "recommended_for": [
+        "Loyalty tier recognition (`get_loyalty_info_tool`)",
+        "Miles upgrades (`upgrade_with_miles_tool`)",
+        "Lounge access and priority baggage ancillary flows"
+      ]
+    },
+    {
+      "persona_slug": "unresponsive_minimalist",
+      "persona_name": "Unresponsive Minimalist",
+      "persona_description": "User who provides minimal one-word answers ('yes', 'no', 'tomorrow', 'DXB'), forcing the assistant to ask follow-up questions to gather necessary details.",
+      "behavioral_traits": [
+        "Answers only the immediate question with minimal tokens",
+        "Does not volunteer additional context or missing parameters",
+        "Tests bot's ability to maintain context across turns and avoid hallucinating missing info"
+      ],
+      "recommended_for": [
+        "Slot-filling and conversational context retention",
+        "Interactive options chips and confirmation buttons",
+        "Missing parameter handling"
+      ]
+    },
+    {
+      "persona_slug": "international_non_native",
+      "persona_name": "International Non-Native English Speaker",
+      "persona_description": "Traveler who speaks broken English, uses non-standard phrases or informal colloquialisms, and might use historical city names (e.g. 'Bombay' for Mumbai/BOM).",
+      "behavioral_traits": [
+        "Uses phonetic spelling or informal city names rather than 3-letter IATA codes",
+        "Makes minor grammatical errors in queries",
+        "Requires clear, simplified, jargon-free assistant responses"
+      ],
+      "recommended_for": [
+        "Entity extraction resilience and airport resolution",
+        "Conversational clarity and plain-language responses",
+        "Tolerance for grammatical variations"
+      ]
+    }
+  ]
+}
+

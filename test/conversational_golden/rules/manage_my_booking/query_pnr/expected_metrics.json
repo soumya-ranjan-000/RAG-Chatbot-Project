@@ -1,0 +1,39 @@
+{
+  "metrics": [
+    {
+      "name": "ConversationalRelevancyMetric",
+      "threshold": 0.7,
+      "description": "Evaluates whether each turn's response is directly relevant to the user query and conversational context."
+    },
+    {
+      "name": "RoleAdherenceMetric",
+      "threshold": 0.8,
+      "description": "Ensures the chatbot adheres strictly to the airline booking assistant persona and policies."
+    },
+    {
+      "name": "FaithfulnessMetric",
+      "threshold": 0.7,
+      "description": "Checks that the chatbot does not hallucinate booking details outside the context."
+    },
+    {
+      "name": "ToolCorrectnessMetric",
+      "threshold": 1.0,
+      "description": "Verifies that the required tools were called with the correct extracted parameters and received valid responses."
+    },
+    {
+      "name": "ToolCallOrderMetric",
+      "threshold": 1.0,
+      "description": "Ensures tool calls occurred in the exact prerequisite chronological order."
+    },
+    {
+      "name": "UIWidgetFormatMetric",
+      "threshold": 1.0,
+      "description": "Validates that all expected markdown code blocks (e.g. ```tickets, ```flights) contain syntactically valid JSON matching the UI schema."
+    },
+    {
+      "name": "NegativeConstraintMetric",
+      "threshold": 1.0,
+      "description": "Asserts that forbidden policy actions were strictly avoided throughout the multi-turn exchange."
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+Airline Policy for PNR Query:
+1. PNR (Passenger Name Record) must consist of exactly 6 uppercase alphanumeric characters.
+2. If the user provides a PNR with less or more than 6 characters, the assistant must inform the user about the 6-character format.
+3. If the user is uncooperative or requests a human agent, the assistant must offer immediate human support handoff without repeated interrogation.
+4. Booking AB1234 details: Flight AI-101 from Bangalore (BLR) to Dubai (DXB), Departure 10:30 AM, Status: Confirmed, Passenger: Jane Smith.
