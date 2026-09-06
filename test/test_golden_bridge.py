@@ -198,6 +198,7 @@ def test_export_and_load_simulated_dataset():
 
         # Check clean locations
         assert "expected_trajectory" in data["expected"]
+        assert "expected_turns" not in data["expected"]
         assert "expected_metrics" in data["metadata"]
         assert data["actual"]["total_turns"] == 1
         assert data["actual"]["performance_summary"]["total_tokens"] == 480
@@ -354,11 +355,75 @@ def test_dynamic_to_deterministic_promotion():
     with tempfile.TemporaryDirectory() as tmp_dir:
         datasets_dir = Path(tmp_dir) / "datasets"
         rules_dir = get_default_rules_dir()
+        runs_dir = Path(tmp_dir) / "run"
 
         results = run_deterministic_generation(
         # 1. Test scaffolding from rules
         scaffold_results = scaffold_from_rules(
             rules_dir=rules_dir,
+        # Create a mock dynamic run JSON file
+        run_file = runs_dir / "2026-09-06_12-00-00" / "manage_my_booking" / "query_pnr" / "normal_direct" / "dynamic_simulation" / "NORM_01_VALID_PNR_DIRECT.json"
+        run_file.parent.mkdir(parents=True, exist_ok=True)
+
+        mock_dynamic_payload = {
+            "testcase_id": "NORM_01_VALID_PNR_DIRECT",
+            "thread_id": "dyn_thread_123",
+            "target_mode": "dynamic_simulation",
+            "scenario_description": "Check booking status for PNR AB1234",
+            "expected_outcome": "Retrieves confirmed flight details",
+            "expected": {
+                "scenario_description": "Check booking status for PNR AB1234",
+                "expected_outcome": "Retrieves confirmed flight details",
+                "expected_trajectory": {
+                    "expected_tools": [{"name": "check_booking_status", "expected_args": {"pnr": "AB1234"}}],
+                    "expected_tools_order": ["check_booking_status"],
+                },
+            },
+            "actual": {
+                "total_turns": 1,
+                "performance_summary": {"total_tokens": 400},
+                "status": "success",
+            },
+            "unified_turns": [
+                {
+                    "turn": 1,
+                    "run_id": "dyn_run_01",
+                    "user_query": "Could you check my booking AB1234?",
+                    "assistant_response": "Your flight AI-101 is Confirmed.",
+                    "actual": {
+                        "tools_called": [
+                            {
+                                "name": "check_booking_status",
+                                "args": {"pnr": "AB1234"},
+                                "response": {"status": "Confirmed", "flight_number": "AI-101"},
+                            }
+                        ],
+                        "tools_order": ["check_booking_status"],
+                        "tokens": {"total_tokens": 400},
+                    },
+                }
+            ],
+            "persona": {
+                "name": "Normal Direct Traveler",
+                "characteristics": "Calm and cooperative",
+            },
+            "context": ["Valid PNR is 6 alphanumeric chars."],
+            "metadata": {
+                "golden_link": {
+                    "rule_category": "manage_my_booking",
+                    "scenario_name": "query_pnr",
+                    "persona_slug": "normal_direct",
+                    "variation_id": "NORM_01_VALID_PNR_DIRECT",
+                }
+            },
+        }
+
+        with open(run_file, "w", encoding="utf-8") as f:
+            json.dump(mock_dynamic_payload, f, indent=2)
+
+        # 1. Promote dynamic run to deterministic ground truth
+        res = promote_run_to_deterministic_dataset(
+            run_file_path=run_file,
             datasets_dir=datasets_dir,
             category_filter="manage_my_booking",
             scenario_filter="query_pnr",
@@ -373,6 +438,7 @@ def test_dynamic_to_deterministic_promotion():
         assert len(scaffold_results) == 1
         res = scaffold_results[0]
         assert res["status"] == "created"
+        assert res["status"] == "promoted"
         assert res["testcase_id"] == "NORM_01_VALID_PNR_DIRECT"
 
         target_file = Path(res["target_path"])
@@ -385,14 +451,20 @@ def test_dynamic_to_deterministic_promotion():
         assert payload["target_mode"] == "deterministic_reply"
         assert len(payload["context"]) > 0
         assert "turn 1" in payload["conversations"]
+
         user_turn = payload["conversations"]["turn 1"][0]
         assert user_turn["role"] == "user"
         # Checks that first-person user_query was loaded
         assert "AB1234" in user_turn["content"]
+        assert user_turn["content"] == "Could you check my booking AB1234?"
 
         asst_turn = payload["conversations"]["turn 1"][1]
         assert asst_turn["role"] == "assistant"
+        assert asst_turn["expected_content"] == "Your flight AI-101 is Confirmed."
         assert asst_turn["expected_tools_call_order"] == ["check_booking_status"]
+        assert asst_turn["expected_tools"][0]["name"] == "check_booking_status"
+        assert asst_turn["expected_tools"][0]["expected_args"] == {"pnr": "AB1234"}
+        assert "expected_turns" not in payload["expected"]
 
         # 2. Test QA review manifest generation
         scenario_dest = datasets_dir / "manage_my_booking" / "query_pnr"

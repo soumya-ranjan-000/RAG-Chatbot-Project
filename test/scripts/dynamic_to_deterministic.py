@@ -198,6 +198,23 @@ def promote_run_to_deterministic_dataset(
             for ut in unified_turns:
                 t_num = ut.get("turn", len(conversations) + 1)
                 exp = ut.get("expected") or {}
+                act = ut.get("actual") or {}
+
+                # Use expected from the actual execution
+                exp_content = exp.get("expected_content") or ut.get("assistant_response") or act.get("response")
+                exp_tools_order = exp.get("expected_tools_order") or act.get("tools_order") or []
+                exp_tools = exp.get("expected_tools")
+                if not exp_tools:
+                    exp_tools = [
+                        {
+                            "name": tc.get("name"),
+                            "expected_args": tc.get("args") or tc.get("inputs") or {},
+                            "expected_response": tc.get("response") or tc.get("output"),
+                        }
+                        for tc in act.get("tools_called", [])
+                        if tc.get("name")
+                    ]
+
                 conversations[f"turn {t_num}"] = [
                     {
                         "role": "user",
@@ -209,6 +226,10 @@ def promote_run_to_deterministic_dataset(
                         "expected_tools_call_order": exp.get("expected_tools_order") or [],
                         "expected_tools": exp.get("expected_tools") or [],
                         "qa_note": exp.get("qa_note"),
+                        "expected_content": exp_content,
+                        "expected_tools_call_order": exp_tools_order,
+                        "expected_tools": exp_tools,
+                        "qa_note": exp.get("qa_note") or f"Promoted from dynamic run {var_id} turn {t_num}",
                     },
                 ]
         else:
@@ -227,10 +248,15 @@ def promote_run_to_deterministic_dataset(
                             "role": "assistant",
                             "expected_content": a_msg.get("expected_content") if a_msg else None,
                             "expected_tools_call_order": a_msg.get("expected_tools_call_order") if a_msg else [],
+                            "expected_content": a_msg.get("expected_content") or a_msg.get("content") if a_msg else None,
+                            "expected_tools_call_order": a_msg.get("expected_tools_call_order") or a_msg.get("actual_tools_call_order") or [] if a_msg else [],
                             "expected_tools": a_msg.get("expected_tools") or a_msg.get("actual_tools_called") or [] if a_msg else [],
                             "qa_note": a_msg.get("qa_note") if a_msg else None,
                         },
                     ]
+
+    promoted_expected = dict(data.get("expected") or {})
+    promoted_expected.pop("expected_turns", None)
 
     promoted_payload = {
         "testcase_id": var_id,
@@ -238,6 +264,7 @@ def promote_run_to_deterministic_dataset(
         "scenario_description": data.get("scenario_description") or "",
         "expected_outcome": data.get("expected_outcome") or "",
         "expected": data.get("expected") or {},
+        "expected": promoted_expected,
         "persona": data.get("persona") or {},
         "context": data.get("context") or [],
         "conversations": conversations,
@@ -480,6 +507,7 @@ def scaffold_from_rules(
 def main():
     parser = argparse.ArgumentParser(
         description="Dynamic-to-Deterministic Conversation Promotion & Golden Truth Generator."
+        description="Dynamic-to-Deterministic Conversation Promotion: Convert approved dynamic simulation runs into curated deterministic ground-truth testcases."
     )
     parser.add_argument(
         "run_file",
@@ -530,6 +558,7 @@ def main():
         "--merge",
         action="store_true",
         help="Merge mode: Update scenario metadata, SLAs, and context from rules while preserving QA's customized queries in conversations.",
+        help="Merge mode: Update scenario metadata, SLAs, and context while preserving QA's customized queries in conversations.",
     )
     parser.add_argument(
         "--lint",
@@ -596,6 +625,8 @@ def main():
 
     # Mode 2: Direct file path provided
     elif args.run_file:
+    # Mode 1: Direct file path provided
+    if args.run_file:
         file_path = Path(args.run_file)
         if "*" in str(file_path):
             matched = [Path(p) for p in glob.glob(str(file_path), recursive=True)]
@@ -625,8 +656,13 @@ def main():
     # Mode 3: Timestamp or latest run directory
     elif args.run_timestamp:
         target_dir = get_latest_run_dir(runs_root=runs_root) if args.run_timestamp == "latest" else get_run_timestamp_dir(timestamp_str=args.run_timestamp, runs_root=runs_root)
+    # Mode 2: Timestamp or latest run directory
+    else:
+        run_ts = args.run_timestamp or "latest"
+        target_dir = get_latest_run_dir(runs_root=runs_root) if run_ts == "latest" else get_run_timestamp_dir(timestamp_str=run_ts, runs_root=runs_root)
         if not target_dir or not target_dir.exists():
             print(f"[Error] Run directory not found: {target_dir}")
+            print(f"[Error] Run directory not found: {target_dir or run_ts}")
             sys.exit(1)
 
         print(f"🚀 Mode: Promoting dynamic runs from {target_dir.name}...")

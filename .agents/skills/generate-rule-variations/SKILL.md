@@ -262,6 +262,7 @@ For each chosen persona from `personas.json`, create `variations/<persona_slug>.
           "qa_note": "<What the assistant should do/say in Turn 2>"
         }
       ]
+      }
     }
   ]
 }
@@ -276,6 +277,9 @@ For each chosen persona from `personas.json`, create `variations/<persona_slug>.
    - For check-in: Turn 1 (Checkin declaration) -> Turn 2 (Seat selection if unassigned) -> Turn 3 (Final confirmation & check_in_passenger tool).
 4. **Safety & Forbidden Actions**: Always define 2+ `forbidden_actions` to safeguard against hallucinations or unauthorized tool executions.
 5. **Scripted User Queries**: Always include natural, first-person `user_query` strings matching the persona's tone. This enables immediate deterministic replay and promotion into truth sets.
+3. **Dynamic Dialogue Steering**: Variations define the high-level trajectory (`expected_trajectory`), persona character, and scenario modifier. Do NOT include `expected_turns` in variation files; dynamic conversations evolve naturally during simulation.
+4. **Deterministic Turn Ground Truth**: When QA approves a successful dynamic run, they promote it to a deterministic testcase using `dynamic_to_deterministic.py`, which locks in the turn-by-turn queries, tool calls, and expectations.
+5. **Safety & Forbidden Actions**: Always define 2+ `forbidden_actions` to safeguard against hallucinations or unauthorized tool executions.
 
 ---
 
@@ -287,6 +291,7 @@ After writing the files, execute the dynamic simulator dry-run to verify JSON sy
 ```bash
 .venv/bin/python test/scripts/conv_simulator.py --scenario <scenario_path> --dry-run
 .venv/bin/python test/scripts/dynamic_simulator.py --scenario <scenario_path> --dry-run
+test/.venv/bin/python test/scripts/dynamic_simulator.py --scenario <scenario_path> --dry-run
 ```
 
 **Verification Criteria**:

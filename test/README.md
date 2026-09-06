@@ -132,15 +132,22 @@ For testing multi-turn chatbot flows (booking flights, checking PNR status, canc
 2. **Preview Scenarios**:
 1. **Author Rules & Variations**: Define scenarios and personas in `test/conversational_golden/rules/`.
 2. **Generate Deterministic QA Test Cases (Optional)**:
+1. **Author Rules & Variations**: Define scenarios and persona variations in `test/conversational_golden/rules/`. Variations define persona parameters, scenario modifiers, and expected trajectories without `expected_turns`.
 2. **Execute Dynamic Simulation**:
    ```bash
    test/.venv/bin/python test/scripts/conv_simulator.py --dry-run
    test/.venv/bin/python test/scripts/deterministic_simulator.py --scenario query_pnr
+   # Dry-run validation
+   test/.venv/bin/python test/scripts/dynamic_simulator.py --scenario query_pnr --dry-run
+
+   # Dynamic LLM simulation (talks to chatbot and captures traces into test/run/)
    test/.venv/bin/python test/scripts/dynamic_simulator.py --scenario query_pnr
    ```
 3. **Execute Dynamic Simulation or Replay**:
 3. **Promote Approved Conversation to Deterministic Truth Set**:
    Once QA verifies a successful conversation in `test/run/`, promote it to `datasets/`:
+3. **Promote Approved Dynamic Run to Deterministic Ground Truth**:
+   Once QA verifies and approves a successful conversation in `test/run/`, convert it to a deterministic truth set under `datasets/`:
    ```bash
    test/.venv/bin/python test/scripts/conv_simulator.py --scenario query_pnr
    # or deterministic replay:
@@ -152,9 +159,11 @@ For testing multi-turn chatbot flows (booking flights, checking PNR status, canc
    test/.venv/bin/python test/scripts/dynamic_to_deterministic.py test/run/latest/.../<variation_id>.json
    # Or scaffold directly from rules:
    test/.venv/bin/python test/scripts/dynamic_to_deterministic.py --from-rules --scenario query_pnr
+   test/.venv/bin/python test/scripts/dynamic_to_deterministic.py test/run/latest/.../<variation_id>.json --overwrite
    ```
 4. **Execute Deterministic Conversation Replay**:
    Replays the curated truth set against the live bot and captures LangSmith traces:
+   Replays the curated truth set against the live bot and captures LangSmith traces into `test/run/`:
    ```bash
    test/.venv/bin/python test/scripts/deterministic_replay.py --scenario query_pnr
    ```

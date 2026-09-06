@@ -80,6 +80,7 @@
           "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
         }
       ]
+      }
     },
     {
       "variation_id": "FRUST_02_DEMANDS_AGENT",
@@ -113,6 +114,7 @@
           "qa_note": "The assistant should acknowledge the user's request for a human representative, apologize for any inconvenience, and initiate human support handoff without interrogation."
         }
       ]
+      }
     }
   ]
 }

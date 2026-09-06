@@ -115,6 +115,7 @@ def test_runs_dir_and_unified_schema_export_and_load():
             payload = json.load(f)
 
         assert "expected" in payload
+        assert "expected_turns" not in payload["expected"]
         assert "actual" in payload
         assert "unified_turns" in payload
         assert payload["thread_id"] == "mock_thread_test"
