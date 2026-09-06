@@ -55,6 +55,7 @@ from scripts.golden_bridge import (
     get_default_datasets_dir,
     get_default_rules_dir,
     get_default_runs_dir,
+    is_deterministic_mode,
     load_scenario_bundle,
     prune_old_runs,
 )
@@ -445,7 +446,11 @@ def main():
     args = parser.parse_args()
 
     rules_root = Path(args.rules_dir) if args.rules_dir else get_default_rules_dir()
-    datasets_root = Path(args.datasets_dir) if args.datasets_dir else None
+    datasets_root = (
+        Path(args.datasets_dir)
+        if args.datasets_dir
+        else (get_default_datasets_dir() if is_deterministic_mode(args.target) else None)
+    )
     runs_root = Path(args.run_dir) if args.run_dir else get_default_runs_dir()
     run_timestamp = args.run_timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -455,8 +460,8 @@ def main():
     print(f"📁 Rules Directory:    {rules_root.resolve()}")
     if datasets_root:
         print(f"📁 Datasets Directory: {datasets_root.resolve()}")
-    else:
-        print(f"📁 Runs Directory:     {(runs_root / run_timestamp).resolve()}")
+    print(f"📁 Runs Directory:     {(runs_root / run_timestamp).resolve()}")
+    print(f"🎯 Target Mode:        {args.target}")
     print(f"🔗 Target Chat API:    {args.backend_url}")
     print(f"🎯 Filter Category:    {args.category or 'All'}")
     print(f"🎯 Filter Scenario:    {args.scenario or 'All'}")

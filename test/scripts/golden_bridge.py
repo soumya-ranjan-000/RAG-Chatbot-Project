@@ -877,8 +877,8 @@ def export_simulated_testcase(
 
     # If saving into run_timestamp/runs_dir, ONLY mirror to datasets_dir if deterministic!
     # Dynamic simulation changes each run and belongs strictly in test/run/<timestamp>/.
-    if is_det and (run_timestamp or runs_dir) and datasets_dir:
-        effective_datasets_dir = Path(datasets_dir)
+    if is_det and (run_timestamp or runs_dir):
+        effective_datasets_dir = Path(datasets_dir) if datasets_dir else get_default_datasets_dir()
         datasets_out_dir = resolve_target_dir(
             dest_root=effective_datasets_dir,
             rule_category=rule_category,
@@ -1025,12 +1025,9 @@ def export_scenario_summary(
 
             f.write("---\n\n")
 
-    # If saving into run_timestamp/runs_dir, also mirror summary to datasets_dir
-    if run_timestamp or runs_dir:
-        effective_datasets_dir = Path(datasets_dir) if datasets_dir else get_default_datasets_dir()
     # If saving into run_timestamp/runs_dir, ONLY mirror summary to datasets_dir if deterministic
-    if is_det and datasets_dir:
-        effective_datasets_dir = Path(datasets_dir)
+    if is_det and (run_timestamp or runs_dir or datasets_dir):
+        effective_datasets_dir = Path(datasets_dir) if datasets_dir else get_default_datasets_dir()
         datasets_base_dir = effective_datasets_dir / scenario_rel_dir
         datasets_base_dir.mkdir(parents=True, exist_ok=True)
         try:

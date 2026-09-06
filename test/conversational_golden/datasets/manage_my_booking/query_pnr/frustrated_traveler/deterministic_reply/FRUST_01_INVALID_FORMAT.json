@@ -75,7 +75,7 @@
     "turn 1": [
       {
         "role": "user",
-        "content": "I need to check my flight status. My PNR is AB123. What's going on with it?"
+        "content": "I need to check my flight status with PNR AB123. What's the hold-up?"
       },
       {
         "role": "assistant",
@@ -90,7 +90,7 @@
     "turn 2": [
       {
         "role": "user",
-        "content": "Are you kidding me? Just check it again. I know my PNR is right!"
+        "content": "This is ridiculous! Just tell me if my flight is on time or not!"
       },
       {
         "role": "assistant",
@@ -103,7 +103,7 @@
     "turn 3": [
       {
         "role": "user",
-        "content": "I told you, it's AB123! Just find my flight already!"
+        "content": "I already told you the PNR! Just check it again and stop wasting my time!"
       },
       {
         "role": "assistant",
@@ -116,7 +116,7 @@
     "turn 4": [
       {
         "role": "user",
-        "content": "This is ridiculous! Just tell me what you can find with that PNR already!"
+        "content": "I don't have time for this! Just give me the status of my flight already!"
       },
       {
         "role": "assistant",
@@ -128,8 +128,8 @@
     ]
   },
   "total_turns": 4,
-  "promoted_from_run": "test/run/2026-09-06_13-46-41/manage_my_booking/query_pnr/frustrated_traveler/dynamic_simulation/FRUST_01_INVALID_FORMAT.json",
-  "promoted_at": "2026-09-06T14:27:49.512530+00:00",
+  "promoted_from_run": "test/run/2026-09-06_14-44-59/manage_my_booking/query_pnr/frustrated_traveler/deterministic_reply/FRUST_01_INVALID_FORMAT.json",
+  "promoted_at": "2026-09-06T14:56:44.551650+00:00",
   "metadata": {
     "rule_category": "manage_my_booking",
     "scenario_name": "query_pnr",
