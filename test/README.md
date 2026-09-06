@@ -130,21 +130,49 @@ For testing multi-turn chatbot flows (booking flights, checking PNR status, canc
 
 1. **Author Rules & Variations**: Define scenarios and personas in `test/conversational_golden/rules/` and `test/conversational_golden/personas.json`.
 2. **Preview Scenarios**:
+1. **Author Rules & Variations**: Define scenarios and personas in `test/conversational_golden/rules/`.
+2. **Generate Deterministic QA Test Cases (Optional)**:
+2. **Execute Dynamic Simulation**:
    ```bash
    test/.venv/bin/python test/scripts/conv_simulator.py --dry-run
+   test/.venv/bin/python test/scripts/deterministic_simulator.py --scenario query_pnr
+   test/.venv/bin/python test/scripts/dynamic_simulator.py --scenario query_pnr
    ```
 3. **Execute Dynamic Simulation or Replay**:
+3. **Promote Approved Conversation to Deterministic Truth Set**:
+   Once QA verifies a successful conversation in `test/run/`, promote it to `datasets/`:
    ```bash
    test/.venv/bin/python test/scripts/conv_simulator.py --scenario query_pnr
    # or deterministic replay:
    test/.venv/bin/python test/scripts/conv_replay_evaluator.py --category manage_my_booking
+   # Dynamic LLM simulation (talks to chatbot and captures traces into test/run/)
+   test/.venv/bin/python test/scripts/dynamic_simulator.py --scenario query_pnr
+
+   # or Deterministic scripted replay (replays curated datasets against live bot)
+   test/.venv/bin/python test/scripts/dynamic_to_deterministic.py test/run/latest/.../<variation_id>.json
+   # Or scaffold directly from rules:
+   test/.venv/bin/python test/scripts/dynamic_to_deterministic.py --from-rules --scenario query_pnr
+   ```
+4. **Execute Deterministic Conversation Replay**:
+   Replays the curated truth set against the live bot and captures LangSmith traces:
+   ```bash
+   test/.venv/bin/python test/scripts/deterministic_replay.py --scenario query_pnr
    ```
 4. **Pre-Evaluation / Unified Data Prep**: Automated LangSmith trace extraction merges actual runtime traces into `test/run/<date_time>/...`.
+4. **Pre-Evaluation / Unified Data Prep**: Automated LangSmith trace extraction merges runtime traces into `test/run/<date_time>/...`.
 5. **Evaluate Multi-Turn Contracts & LLM Metrics**:
    ```bash
    test/.venv/bin/python test/scripts/conv_evaluator.py --run latest
+   # Evaluate deterministic contracts (tools, order, widgets, SLA)
+   # Evaluate deterministic contracts (tools, args, order, widgets, SLA)
+   test/.venv/bin/python test/scripts/deterministic_eval.py --run latest
+
+   # Evaluate dynamic runs with LLM-as-a-judge metrics (RoleAdherence, Faithfulness, etc.)
+   test/.venv/bin/python test/scripts/dynamic_eval.py --run latest --skip-llm
    ```
 6. **Run Test Suite**:
+6. **Run Regression Test Suite**:
    ```bash
    test/.venv/bin/pytest test/test_golden_bridge.py test/test_conv_evaluator.py -v
+   test/.venv/bin/pytest test/ -v
    ```

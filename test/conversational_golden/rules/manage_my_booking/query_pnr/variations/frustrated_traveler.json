@@ -39,24 +39,43 @@
       "expected_turns": [
         {
           "turn": 1,
+          "user_query": "I need to check my flight status with PNR AB123. What's the hold-up?",
+          "user_query_alternatives": [
+            "Check status for PNR AB123 right now.",
+            "Can you tell me where flight AB123 is?"
+          ],
           "review_only": true,
           "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code.",
           "expected_tools_call_order": [
             "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB123"
+              },
+              "expected_response": {
+                "error": "Booking not found for PNR AB123."
+              }
+            }
           ]
         },
         {
           "turn": 2,
+          "user_query": "This is ridiculous! Just tell me if my flight is on time or not!",
           "review_only": true,
           "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
         },
         {
           "turn": 3,
+          "user_query": "I already told you the PNR! Just check it again and stop wasting my time!",
           "review_only": true,
           "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
         },
         {
           "turn": 4,
+          "user_query": "I don't have time for this! Just give me the status of my flight already!",
           "review_only": true,
           "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
         }
@@ -85,6 +104,11 @@
       "expected_turns": [
         {
           "turn": 1,
+          "user_query": "I don't want to talk to an automated system. Connect me to a live agent immediately!",
+          "user_query_alternatives": [
+            "Human representative now!",
+            "Agent please, I don't want a bot."
+          ],
           "review_only": true,
           "qa_note": "The assistant should acknowledge the user's request for a human representative, apologize for any inconvenience, and initiate human support handoff without interrogation."
         }

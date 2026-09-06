@@ -39,24 +39,43 @@
     "expected_turns": [
       {
         "turn": 1,
+        "user_query": "I need to check my flight status with PNR AB123. What's the hold-up?",
+        "user_query_alternatives": [
+          "Check status for PNR AB123 right now.",
+          "Can you tell me where flight AB123 is?"
+        ],
         "review_only": true,
         "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code.",
         "expected_tools_call_order": [
           "check_booking_status"
+        ],
+        "expected_tools": [
+          {
+            "name": "check_booking_status",
+            "expected_args": {
+              "pnr": "AB123"
+            },
+            "expected_response": {
+              "error": "Booking not found for PNR AB123."
+            }
+          }
         ]
       },
       {
         "turn": 2,
+        "user_query": "This is ridiculous! Just tell me if my flight is on time or not!",
         "review_only": true,
         "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
       },
       {
         "turn": 3,
+        "user_query": "I already told you the PNR! Just check it again and stop wasting my time!",
         "review_only": true,
         "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
       },
       {
         "turn": 4,
+        "user_query": "I don't have time for this! Just give me the status of my flight already!",
         "review_only": true,
         "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
       }
@@ -83,8 +102,18 @@
         "expected_tools_call_order": [
           "check_booking_status"
         ],
-        "expected_tools": [],
-        "qa_note": null
+        "expected_tools": [
+          {
+            "name": "check_booking_status",
+            "expected_args": {
+              "pnr": "AB123"
+            },
+            "expected_response": {
+              "error": "Booking not found for PNR AB123."
+            }
+          }
+        ],
+        "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code."
       }
     ],
     "turn 2": [
@@ -97,7 +126,7 @@
         "expected_content": null,
         "expected_tools_call_order": [],
         "expected_tools": [],
-        "qa_note": null
+        "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
       }
     ],
     "turn 3": [
@@ -110,7 +139,7 @@
         "expected_content": null,
         "expected_tools_call_order": [],
         "expected_tools": [],
-        "qa_note": null
+        "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
       }
     ],
     "turn 4": [
@@ -123,24 +152,17 @@
         "expected_content": null,
         "expected_tools_call_order": [],
         "expected_tools": [],
-        "qa_note": null
+        "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
       }
     ]
   },
   "total_turns": 4,
-  "promoted_from_run": "test/run/2026-09-06_14-44-59/manage_my_booking/query_pnr/frustrated_traveler/deterministic_reply/FRUST_01_INVALID_FORMAT.json",
-  "promoted_at": "2026-09-06T14:56:44.551650+00:00",
+  "created_from_rules": "2026-09-06T17:05:36.095174+00:00",
   "metadata": {
     "rule_category": "manage_my_booking",
     "scenario_name": "query_pnr",
-    "scenario_rel_dir": "manage_my_booking/query_pnr",
-    "scenario_id": "SCENARIO_PNR_01",
     "persona_slug": "frustrated_traveler",
-    "persona_name": "Frustrated Traveler",
-    "persona_description": "Highly impatient, easily annoyed, and uses short, aggressive sentences.",
     "variation_id": "FRUST_01_INVALID_FORMAT",
-    "variation_file": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/variations/frustrated_traveler.json",
-    "scenario_config_file": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/scenario_config.json",
     "expected_metrics": {
       "metrics": [
         {
@@ -183,13 +205,7 @@
     "golden_link": {
       "rule_category": "manage_my_booking",
       "scenario_name": "query_pnr",
-      "scenario_rel_dir": "manage_my_booking/query_pnr",
-      "scenario_id": "SCENARIO_PNR_01",
-      "scenario_config_path": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/scenario_config.json",
-      "variation_file": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/variations/frustrated_traveler.json",
       "persona_slug": "frustrated_traveler",
-      "persona_name": "Frustrated Traveler",
-      "persona_description": "Highly impatient, easily annoyed, and uses short, aggressive sentences.",
       "variation_id": "FRUST_01_INVALID_FORMAT"
     }
   }

@@ -1,0 +1,715 @@
+[
+  {
+    "testcase_id": "FRUST_01_INVALID_FORMAT",
+    "target_mode": "deterministic_reply",
+    "scenario_description": "The user wants to check the status of their flight booking using a PNR. Ask for flight status but provide a 5-letter PNR ('AB123'). When told it is invalid, act annoyed and refuse to provide the correct one.",
+    "expected_outcome": "The chatbot politely explains the 6-character requirement and offers a human handoff.",
+    "expected": {
+      "scenario_description": "The user wants to check the status of their flight booking using a PNR. Ask for flight status but provide a 5-letter PNR ('AB123'). When told it is invalid, act annoyed and refuse to provide the correct one.",
+      "expected_outcome": "The chatbot politely explains the 6-character requirement and offers a human handoff.",
+      "expected_trajectory": {
+        "expected_tools": [
+          {
+            "name": "check_booking_status",
+            "expected_args": {
+              "pnr": "AB123"
+            },
+            "expected_response": {
+              "error": "Booking not found for PNR AB123."
+            }
+          }
+        ],
+        "expected_tools_order": [
+          "check_booking_status"
+        ],
+        "expected_ui_widgets": [],
+        "expected_entities": {
+          "pnr": "AB123"
+        },
+        "forbidden_actions": [
+          "Do not invent fake flight details when an invalid PNR is provided",
+          "Do not refuse human handoff when user becomes frustrated"
+        ],
+        "expected_citations": [],
+        "performance_sla": {
+          "max_ttft_ms": 2000,
+          "max_turn_latency_ms": 6000,
+          "max_total_tokens": 4000
+        }
+      },
+      "expected_turns": [
+        {
+          "turn": 1,
+          "user_query": "I need to check my flight status with PNR AB123. What's the hold-up?",
+          "user_query_alternatives": [
+            "Check status for PNR AB123 right now.",
+            "Can you tell me where flight AB123 is?"
+          ],
+          "review_only": true,
+          "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code.",
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB123"
+              },
+              "expected_response": {
+                "error": "Booking not found for PNR AB123."
+              }
+            }
+          ]
+        },
+        {
+          "turn": 2,
+          "user_query": "This is ridiculous! Just tell me if my flight is on time or not!",
+          "review_only": true,
+          "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
+        },
+        {
+          "turn": 3,
+          "user_query": "I already told you the PNR! Just check it again and stop wasting my time!",
+          "review_only": true,
+          "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
+        },
+        {
+          "turn": 4,
+          "user_query": "I don't have time for this! Just give me the status of my flight already!",
+          "review_only": true,
+          "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
+        }
+      ]
+    },
+    "persona": {
+      "name": "Frustrated Traveler",
+      "characteristics": "Highly impatient, easily annoyed, and uses short, aggressive sentences."
+    },
+    "context": [
+      "A valid PNR must be exactly 6 alphanumeric characters.",
+      "The user's actual valid PNR is 'AB1234', which is for an AI-101 flight to Dubai, Status: Confirmed.",
+      "Airline Policy for PNR Query:\n1. PNR (Passenger Name Record) must consist of exactly 6 uppercase alphanumeric characters.\n2. If the user provides a PNR with less or more than 6 characters, the assistant must inform the user about the 6-character format.\n3. If the user is uncooperative or requests a human agent, the assistant must offer immediate human support handoff without repeated interrogation.\n4. Booking AB1234 details: Flight AI-101 from Bangalore (BLR) to Dubai (DXB), Departure 10:30 AM, Status: Confirmed, Passenger: Jane Smith."
+    ],
+    "conversations": {
+      "turn 1": [
+        {
+          "role": "user",
+          "content": "I need to check my flight status with PNR AB123. What's the hold-up?"
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB123"
+              },
+              "expected_response": {
+                "error": "Booking not found for PNR AB123."
+              }
+            }
+          ],
+          "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code."
+        }
+      ],
+      "turn 2": [
+        {
+          "role": "user",
+          "content": "This is ridiculous! Just tell me if my flight is on time or not!"
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [],
+          "expected_tools": [],
+          "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
+        }
+      ],
+      "turn 3": [
+        {
+          "role": "user",
+          "content": "I already told you the PNR! Just check it again and stop wasting my time!"
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [],
+          "expected_tools": [],
+          "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
+        }
+      ],
+      "turn 4": [
+        {
+          "role": "user",
+          "content": "I don't have time for this! Just give me the status of my flight already!"
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [],
+          "expected_tools": [],
+          "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
+        }
+      ]
+    },
+    "total_turns": 4,
+    "created_from_rules": "2026-09-06T17:05:36.095174+00:00",
+    "metadata": {
+      "rule_category": "manage_my_booking",
+      "scenario_name": "query_pnr",
+      "persona_slug": "frustrated_traveler",
+      "variation_id": "FRUST_01_INVALID_FORMAT",
+      "expected_metrics": {
+        "metrics": [
+          {
+            "name": "ConversationalRelevancyMetric",
+            "threshold": 0.7,
+            "description": "Evaluates whether each turn's response is directly relevant to the user query and conversational context."
+          },
+          {
+            "name": "RoleAdherenceMetric",
+            "threshold": 0.8,
+            "description": "Ensures the chatbot adheres strictly to the airline booking assistant persona and policies."
+          },
+          {
+            "name": "FaithfulnessMetric",
+            "threshold": 0.7,
+            "description": "Checks that the chatbot does not hallucinate booking details outside the context."
+          },
+          {
+            "name": "ToolCorrectnessMetric",
+            "threshold": 1.0,
+            "description": "Verifies that the required tools were called with the correct extracted parameters and received valid responses."
+          },
+          {
+            "name": "ToolCallOrderMetric",
+            "threshold": 1.0,
+            "description": "Ensures tool calls occurred in the exact prerequisite chronological order."
+          },
+          {
+            "name": "UIWidgetFormatMetric",
+            "threshold": 1.0,
+            "description": "Validates that all expected markdown code blocks (e.g. ```tickets, ```flights) contain syntactically valid JSON matching the UI schema."
+          },
+          {
+            "name": "NegativeConstraintMetric",
+            "threshold": 1.0,
+            "description": "Asserts that forbidden policy actions were strictly avoided throughout the multi-turn exchange."
+          }
+        ]
+      },
+      "golden_link": {
+        "rule_category": "manage_my_booking",
+        "scenario_name": "query_pnr",
+        "persona_slug": "frustrated_traveler",
+        "variation_id": "FRUST_01_INVALID_FORMAT"
+      }
+    }
+  },
+  {
+    "testcase_id": "FRUST_02_DEMANDS_AGENT",
+    "target_mode": "deterministic_reply",
+    "scenario_description": "The user wants to check the status of their flight booking using a PNR. Immediately demand to speak to a human agent to check the PNR without even trying to talk to the bot.",
+    "expected_outcome": "The chatbot successfully routes the conversation to a human agent without forcing the user to verify the PNR first.",
+    "expected": {
+      "scenario_description": "The user wants to check the status of their flight booking using a PNR. Immediately demand to speak to a human agent to check the PNR without even trying to talk to the bot.",
+      "expected_outcome": "The chatbot successfully routes the conversation to a human agent without forcing the user to verify the PNR first.",
+      "expected_trajectory": {
+        "expected_tools": [],
+        "expected_tools_order": [],
+        "expected_ui_widgets": [],
+        "expected_entities": {},
+        "forbidden_actions": [
+          "Do not refuse human handoff when user explicitly demands a human agent",
+          "Do not force user to enter PNR before connecting to human support"
+        ],
+        "expected_citations": [],
+        "performance_sla": {
+          "max_ttft_ms": 2000,
+          "max_turn_latency_ms": 5000,
+          "max_total_tokens": 3000
+        }
+      },
+      "expected_turns": [
+        {
+          "turn": 1,
+          "user_query": "I don't want to talk to an automated system. Connect me to a live agent immediately!",
+          "user_query_alternatives": [
+            "Human representative now!",
+            "Agent please, I don't want a bot."
+          ],
+          "review_only": true,
+          "qa_note": "The assistant should acknowledge the user's request for a human representative, apologize for any inconvenience, and initiate human support handoff without interrogation."
+        }
+      ]
+    },
+    "persona": {
+      "name": "Frustrated Traveler",
+      "characteristics": "Highly impatient, easily annoyed, and uses short, aggressive sentences."
+    },
+    "context": [
+      "A valid PNR must be exactly 6 alphanumeric characters.",
+      "The user's actual valid PNR is 'AB1234', which is for an AI-101 flight to Dubai, Status: Confirmed.",
+      "Airline Policy for PNR Query:\n1. PNR (Passenger Name Record) must consist of exactly 6 uppercase alphanumeric characters.\n2. If the user provides a PNR with less or more than 6 characters, the assistant must inform the user about the 6-character format.\n3. If the user is uncooperative or requests a human agent, the assistant must offer immediate human support handoff without repeated interrogation.\n4. Booking AB1234 details: Flight AI-101 from Bangalore (BLR) to Dubai (DXB), Departure 10:30 AM, Status: Confirmed, Passenger: Jane Smith."
+    ],
+    "conversations": {
+      "turn 1": [
+        {
+          "role": "user",
+          "content": "I don't want to talk to an automated system. Connect me to a live agent immediately!"
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [],
+          "expected_tools": [],
+          "qa_note": "The assistant should acknowledge the user's request for a human representative, apologize for any inconvenience, and initiate human support handoff without interrogation."
+        }
+      ]
+    },
+    "total_turns": 1,
+    "created_from_rules": "2026-09-06T17:05:36.097563+00:00",
+    "metadata": {
+      "rule_category": "manage_my_booking",
+      "scenario_name": "query_pnr",
+      "persona_slug": "frustrated_traveler",
+      "variation_id": "FRUST_02_DEMANDS_AGENT",
+      "expected_metrics": {
+        "metrics": [
+          {
+            "name": "ConversationalRelevancyMetric",
+            "threshold": 0.7,
+            "description": "Evaluates whether each turn's response is directly relevant to the user query and conversational context."
+          },
+          {
+            "name": "RoleAdherenceMetric",
+            "threshold": 0.8,
+            "description": "Ensures the chatbot adheres strictly to the airline booking assistant persona and policies."
+          },
+          {
+            "name": "FaithfulnessMetric",
+            "threshold": 0.7,
+            "description": "Checks that the chatbot does not hallucinate booking details outside the context."
+          },
+          {
+            "name": "ToolCorrectnessMetric",
+            "threshold": 1.0,
+            "description": "Verifies that the required tools were called with the correct extracted parameters and received valid responses."
+          },
+          {
+            "name": "ToolCallOrderMetric",
+            "threshold": 1.0,
+            "description": "Ensures tool calls occurred in the exact prerequisite chronological order."
+          },
+          {
+            "name": "UIWidgetFormatMetric",
+            "threshold": 1.0,
+            "description": "Validates that all expected markdown code blocks (e.g. ```tickets, ```flights) contain syntactically valid JSON matching the UI schema."
+          },
+          {
+            "name": "NegativeConstraintMetric",
+            "threshold": 1.0,
+            "description": "Asserts that forbidden policy actions were strictly avoided throughout the multi-turn exchange."
+          }
+        ]
+      },
+      "golden_link": {
+        "rule_category": "manage_my_booking",
+        "scenario_name": "query_pnr",
+        "persona_slug": "frustrated_traveler",
+        "variation_id": "FRUST_02_DEMANDS_AGENT"
+      }
+    }
+  },
+  {
+    "testcase_id": "NORM_01_VALID_PNR_DIRECT",
+    "target_mode": "deterministic_reply",
+    "scenario_description": "The user wants to check the status of their flight booking using a PNR. Inquire about flight status and directly provide the valid PNR \"AB1234\" in the first query.",
+    "expected_outcome": "The chatbot immediately retrieves and presents the flight status details for AI-101 to Dubai (Confirmed).",
+    "expected": {
+      "scenario_description": "The user wants to check the status of their flight booking using a PNR. Inquire about flight status and directly provide the valid PNR \"AB1234\" in the first query.",
+      "expected_outcome": "The chatbot immediately retrieves and presents the flight status details for AI-101 to Dubai (Confirmed).",
+      "expected_trajectory": {
+        "expected_tools": [
+          {
+            "name": "check_booking_status",
+            "expected_args": {
+              "pnr": "AB1234"
+            },
+            "expected_response": {
+              "pnr": "AB1234",
+              "passenger_name": "Jane Smith",
+              "flight_number": "AI-101",
+              "origin": "BLR",
+              "destination": "DXB",
+              "status": "Confirmed"
+            }
+          }
+        ],
+        "expected_tools_order": [
+          "check_booking_status"
+        ],
+        "expected_ui_widgets": [
+          "tickets"
+        ],
+        "expected_entities": {
+          "pnr": "AB1234"
+        },
+        "forbidden_actions": [
+          "Do not ask for PNR again if already provided in query 1",
+          "Do not refuse booking lookup when valid 6-character PNR is given"
+        ],
+        "expected_citations": [],
+        "performance_sla": {
+          "max_ttft_ms": 2000,
+          "max_turn_latency_ms": 6000,
+          "max_total_tokens": 4000
+        }
+      },
+      "expected_turns": [
+        {
+          "turn": 1,
+          "user_query": "Hi, could you please check the status of my booking? My PNR is AB1234.",
+          "user_query_alternatives": [
+            "Please check my flight status for PNR AB1234.",
+            "Flight status for AB1234 please."
+          ],
+          "review_only": true,
+          "qa_note": "The assistant should use the provided valid PNR AB1234 to look up the booking, confirm the AI-101 flight to Dubai is confirmed, and present the booking in a tickets-style response.",
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB1234"
+              },
+              "expected_response": {
+                "pnr": "AB1234",
+                "passenger_name": "Jane Smith",
+                "flight_number": "AI-101",
+                "origin": "BLR",
+                "destination": "DXB",
+                "status": "Confirmed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "persona": {
+      "name": "Normal Direct Traveler",
+      "characteristics": "Calm, cooperative, clear, and provides details promptly when requested."
+    },
+    "context": [
+      "A valid PNR must be exactly 6 alphanumeric characters.",
+      "The user's actual valid PNR is 'AB1234', which is for an AI-101 flight to Dubai, Status: Confirmed.",
+      "Airline Policy for PNR Query:\n1. PNR (Passenger Name Record) must consist of exactly 6 uppercase alphanumeric characters.\n2. If the user provides a PNR with less or more than 6 characters, the assistant must inform the user about the 6-character format.\n3. If the user is uncooperative or requests a human agent, the assistant must offer immediate human support handoff without repeated interrogation.\n4. Booking AB1234 details: Flight AI-101 from Bangalore (BLR) to Dubai (DXB), Departure 10:30 AM, Status: Confirmed, Passenger: Jane Smith."
+    ],
+    "conversations": {
+      "turn 1": [
+        {
+          "role": "user",
+          "content": "Hi, could you please check the status of my booking? My PNR is AB1234."
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB1234"
+              },
+              "expected_response": {
+                "pnr": "AB1234",
+                "passenger_name": "Jane Smith",
+                "flight_number": "AI-101",
+                "origin": "BLR",
+                "destination": "DXB",
+                "status": "Confirmed"
+              }
+            }
+          ],
+          "qa_note": "The assistant should use the provided valid PNR AB1234 to look up the booking, confirm the AI-101 flight to Dubai is confirmed, and present the booking in a tickets-style response."
+        }
+      ]
+    },
+    "total_turns": 1,
+    "created_from_rules": "2026-09-06T17:05:36.099542+00:00",
+    "metadata": {
+      "rule_category": "manage_my_booking",
+      "scenario_name": "query_pnr",
+      "persona_slug": "normal_direct",
+      "variation_id": "NORM_01_VALID_PNR_DIRECT",
+      "expected_metrics": {
+        "metrics": [
+          {
+            "name": "ConversationalRelevancyMetric",
+            "threshold": 0.7,
+            "description": "Evaluates whether each turn's response is directly relevant to the user query and conversational context."
+          },
+          {
+            "name": "RoleAdherenceMetric",
+            "threshold": 0.8,
+            "description": "Ensures the chatbot adheres strictly to the airline booking assistant persona and policies."
+          },
+          {
+            "name": "FaithfulnessMetric",
+            "threshold": 0.7,
+            "description": "Checks that the chatbot does not hallucinate booking details outside the context."
+          },
+          {
+            "name": "ToolCorrectnessMetric",
+            "threshold": 1.0,
+            "description": "Verifies that the required tools were called with the correct extracted parameters and received valid responses."
+          },
+          {
+            "name": "ToolCallOrderMetric",
+            "threshold": 1.0,
+            "description": "Ensures tool calls occurred in the exact prerequisite chronological order."
+          },
+          {
+            "name": "UIWidgetFormatMetric",
+            "threshold": 1.0,
+            "description": "Validates that all expected markdown code blocks (e.g. ```tickets, ```flights) contain syntactically valid JSON matching the UI schema."
+          },
+          {
+            "name": "NegativeConstraintMetric",
+            "threshold": 1.0,
+            "description": "Asserts that forbidden policy actions were strictly avoided throughout the multi-turn exchange."
+          }
+        ]
+      },
+      "golden_link": {
+        "rule_category": "manage_my_booking",
+        "scenario_name": "query_pnr",
+        "persona_slug": "normal_direct",
+        "variation_id": "NORM_01_VALID_PNR_DIRECT"
+      }
+    }
+  },
+  {
+    "testcase_id": "NORM_02_PNR_ON_REQUEST",
+    "target_mode": "deterministic_reply",
+    "scenario_description": "The user wants to check the status of their flight booking using a PNR. Ask generally how to check flight status, and when asked by the chatbot, provide the valid PNR \"AB1234\".",
+    "expected_outcome": "The chatbot prompts for the 6-character PNR, accepts \"AB1234\", and displays the confirmed booking details.",
+    "expected": {
+      "scenario_description": "The user wants to check the status of their flight booking using a PNR. Ask generally how to check flight status, and when asked by the chatbot, provide the valid PNR \"AB1234\".",
+      "expected_outcome": "The chatbot prompts for the 6-character PNR, accepts \"AB1234\", and displays the confirmed booking details.",
+      "expected_trajectory": {
+        "expected_tools": [
+          {
+            "name": "check_booking_status",
+            "expected_args": {
+              "pnr": "AB1234"
+            },
+            "expected_response": {
+              "pnr": "AB1234",
+              "passenger_name": "Jane Smith",
+              "flight_number": "AI-101",
+              "origin": "BLR",
+              "destination": "DXB",
+              "status": "Confirmed"
+            }
+          }
+        ],
+        "expected_tools_order": [
+          "check_booking_status"
+        ],
+        "expected_ui_widgets": [
+          "tickets"
+        ],
+        "expected_entities": {
+          "pnr": "AB1234"
+        },
+        "forbidden_actions": [
+          "Do not hallucinate booking details in turn 1 before receiving PNR",
+          "Do not refuse lookup after valid PNR is supplied in turn 2"
+        ],
+        "expected_citations": [],
+        "performance_sla": {
+          "max_ttft_ms": 2000,
+          "max_turn_latency_ms": 6000,
+          "max_total_tokens": 4000
+        }
+      },
+      "expected_turns": [
+        {
+          "turn": 1,
+          "user_query": "Hello, I would like to check the status of my flight booking.",
+          "user_query_alternatives": [
+            "Hi, how can I see if my flight is on time?",
+            "Can you help me check my reservation status?"
+          ],
+          "review_only": true,
+          "qa_note": "The assistant should ask for the 6-character booking reference code (PNR) in a clear and minimal way.",
+          "expected_tools_call_order": [],
+          "expected_tools": []
+        },
+        {
+          "turn": 2,
+          "user_query": "Sure, my booking reference code is AB1234.",
+          "user_query_alternatives": [
+            "My PNR is AB1234.",
+            "The code is AB1234."
+          ],
+          "review_only": true,
+          "qa_note": "Once the user provides AB1234, the assistant should run the booking lookup and display the confirmed AI-101 travel details in a tickets-style response.",
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB1234"
+              },
+              "expected_response": {
+                "pnr": "AB1234",
+                "passenger_name": "Jane Smith",
+                "flight_number": "AI-101",
+                "origin": "BLR",
+                "destination": "DXB",
+                "status": "Confirmed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "persona": {
+      "name": "Normal Direct Traveler",
+      "characteristics": "Calm, cooperative, clear, and provides details promptly when requested."
+    },
+    "context": [
+      "A valid PNR must be exactly 6 alphanumeric characters.",
+      "The user's actual valid PNR is 'AB1234', which is for an AI-101 flight to Dubai, Status: Confirmed.",
+      "Airline Policy for PNR Query:\n1. PNR (Passenger Name Record) must consist of exactly 6 uppercase alphanumeric characters.\n2. If the user provides a PNR with less or more than 6 characters, the assistant must inform the user about the 6-character format.\n3. If the user is uncooperative or requests a human agent, the assistant must offer immediate human support handoff without repeated interrogation.\n4. Booking AB1234 details: Flight AI-101 from Bangalore (BLR) to Dubai (DXB), Departure 10:30 AM, Status: Confirmed, Passenger: Jane Smith."
+    ],
+    "conversations": {
+      "turn 1": [
+        {
+          "role": "user",
+          "content": "Hello, I would like to check the status of my flight booking."
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB1234"
+              },
+              "expected_response": {
+                "pnr": "AB1234",
+                "passenger_name": "Jane Smith",
+                "flight_number": "AI-101",
+                "origin": "BLR",
+                "destination": "DXB",
+                "status": "Confirmed"
+              }
+            }
+          ],
+          "qa_note": "The assistant should ask for the 6-character booking reference code (PNR) in a clear and minimal way."
+        }
+      ],
+      "turn 2": [
+        {
+          "role": "user",
+          "content": "Sure, my booking reference code is AB1234."
+        },
+        {
+          "role": "assistant",
+          "expected_content": null,
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ],
+          "expected_tools": [
+            {
+              "name": "check_booking_status",
+              "expected_args": {
+                "pnr": "AB1234"
+              },
+              "expected_response": {
+                "pnr": "AB1234",
+                "passenger_name": "Jane Smith",
+                "flight_number": "AI-101",
+                "origin": "BLR",
+                "destination": "DXB",
+                "status": "Confirmed"
+              }
+            }
+          ],
+          "qa_note": "Once the user provides AB1234, the assistant should run the booking lookup and display the confirmed AI-101 travel details in a tickets-style response."
+        }
+      ]
+    },
+    "total_turns": 2,
+    "created_from_rules": "2026-09-06T17:05:36.101024+00:00",
+    "metadata": {
+      "rule_category": "manage_my_booking",
+      "scenario_name": "query_pnr",
+      "persona_slug": "normal_direct",
+      "variation_id": "NORM_02_PNR_ON_REQUEST",
+      "expected_metrics": {
+        "metrics": [
+          {
+            "name": "ConversationalRelevancyMetric",
+            "threshold": 0.7,
+            "description": "Evaluates whether each turn's response is directly relevant to the user query and conversational context."
+          },
+          {
+            "name": "RoleAdherenceMetric",
+            "threshold": 0.8,
+            "description": "Ensures the chatbot adheres strictly to the airline booking assistant persona and policies."
+          },
+          {
+            "name": "FaithfulnessMetric",
+            "threshold": 0.7,
+            "description": "Checks that the chatbot does not hallucinate booking details outside the context."
+          },
+          {
+            "name": "ToolCorrectnessMetric",
+            "threshold": 1.0,
+            "description": "Verifies that the required tools were called with the correct extracted parameters and received valid responses."
+          },
+          {
+            "name": "ToolCallOrderMetric",
+            "threshold": 1.0,
+            "description": "Ensures tool calls occurred in the exact prerequisite chronological order."
+          },
+          {
+            "name": "UIWidgetFormatMetric",
+            "threshold": 1.0,
+            "description": "Validates that all expected markdown code blocks (e.g. ```tickets, ```flights) contain syntactically valid JSON matching the UI schema."
+          },
+          {
+            "name": "NegativeConstraintMetric",
+            "threshold": 1.0,
+            "description": "Asserts that forbidden policy actions were strictly avoided throughout the multi-turn exchange."
+          }
+        ]
+      },
+      "golden_link": {
+        "rule_category": "manage_my_booking",
+        "scenario_name": "query_pnr",
+        "persona_slug": "normal_direct",
+        "variation_id": "NORM_02_PNR_ON_REQUEST"
+      }
+    }
+  }
+]

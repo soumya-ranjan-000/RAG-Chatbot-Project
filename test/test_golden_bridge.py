@@ -72,7 +72,7 @@ def test_build_conversational_goldens():
 
 
 def test_ui_widgets_and_citations_extraction():
-    from scripts.conv_simulator import extract_ui_widgets, extract_citations
+    from scripts.dynamic_simulator import extract_ui_widgets, extract_citations
 
     sample_content = (
         "Here are your flight details as per [airline_policy.pdf, Page 4]:\n\n"
@@ -340,3 +340,66 @@ def test_dynamic_simulation_does_not_pollute_datasets():
         assert p_data["target_mode"] == "deterministic_reply"
         assert "turn 1" in p_data["conversations"]
         assert p_data["conversations"]["turn 1"][0]["content"] == "Hello"
+
+
+def test_deterministic_simulator_generation():
+    from scripts.deterministic_simulator import run_deterministic_generation
+def test_dynamic_to_deterministic_promotion():
+    from scripts.dynamic_to_deterministic import (
+        promote_run_to_deterministic_dataset,
+        scaffold_from_rules,
+        generate_scenario_qa_manifest,
+    )
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        datasets_dir = Path(tmp_dir) / "datasets"
+        rules_dir = get_default_rules_dir()
+
+        results = run_deterministic_generation(
+        # 1. Test scaffolding from rules
+        scaffold_results = scaffold_from_rules(
+            rules_dir=rules_dir,
+            datasets_dir=datasets_dir,
+            category_filter="manage_my_booking",
+            scenario_filter="query_pnr",
+            variation_filter="NORM_01_VALID_PNR_DIRECT",
+            overwrite=True,
+            lint=True,
+            dry_run=False,
+        )
+
+        assert len(results) == 1
+        res = results[0]
+        assert len(scaffold_results) == 1
+        res = scaffold_results[0]
+        assert res["status"] == "created"
+        assert res["testcase_id"] == "NORM_01_VALID_PNR_DIRECT"
+
+        target_file = Path(res["target_path"])
+        assert target_file.exists()
+
+        with open(target_file, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        assert payload["testcase_id"] == "NORM_01_VALID_PNR_DIRECT"
+        assert payload["target_mode"] == "deterministic_reply"
+        assert len(payload["context"]) > 0
+        assert "turn 1" in payload["conversations"]
+        user_turn = payload["conversations"]["turn 1"][0]
+        assert user_turn["role"] == "user"
+        # Checks that first-person user_query was loaded
+        assert "AB1234" in user_turn["content"]
+
+        asst_turn = payload["conversations"]["turn 1"][1]
+        assert asst_turn["role"] == "assistant"
+        assert asst_turn["expected_tools_call_order"] == ["check_booking_status"]
+
+        # 2. Test QA review manifest generation
+        scenario_dest = datasets_dir / "manage_my_booking" / "query_pnr"
+        manifest_path = generate_scenario_qa_manifest(scenario_dest)
+        assert manifest_path.exists()
+        assert manifest_path.name == "qa_review.md"
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        assert "NORM_01_VALID_PNR_DIRECT" in manifest_text
+        assert "Normal Direct Traveler" in manifest_text
+

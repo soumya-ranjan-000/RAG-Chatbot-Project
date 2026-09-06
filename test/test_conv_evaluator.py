@@ -17,10 +17,13 @@ from scripts.golden_bridge import (
     load_dataset_for_evaluation,
     prune_old_runs,
 )
-from scripts.conv_evaluator import (
+from scripts.conv_metrics import (
     evaluate_deterministic_contracts,
-    run_evaluation_suite,
+    register_custom_metric,
 )
+from scripts.deterministic_eval import evaluate_deterministic_run
+from scripts.dynamic_eval import evaluate_dynamic_run
+from scripts.conv_evaluator import run_evaluation_suite
 
 
 def test_runs_dir_and_unified_schema_export_and_load():
@@ -149,23 +152,33 @@ def test_runs_dir_and_unified_schema_export_and_load():
         assert det_eval["performance_sla"]["passed"] is True
         assert det_eval["negative_constraints"]["passed"] is True
 
-        # 6. Execute run_evaluation_suite and verify evaluation_report.json
-        report = run_evaluation_suite(
+        # 6. Execute evaluate_dynamic_run and verify dynamic_evaluation_report.json
+        dyn_report = evaluate_dynamic_run(
             runs_dir=runs_root,
             run_timestamp=run_ts,
             skip_llm=True,
             dry_run=False,
         )
-        assert report["total_testcases"] == 1
-        assert report["passed_testcases"] == 1
-        assert report["failed_testcases"] == 0
+        assert dyn_report["total_testcases"] == 1
+        assert dyn_report["passed_testcases"] == 1
+        assert dyn_report["failed_testcases"] == 0
 
-        report_path = runs_root / run_ts / "evaluation_report.json"
-        assert report_path.exists()
-        with open(report_path, "r", encoding="utf-8") as f:
-            saved_report = json.load(f)
-        assert saved_report["total_testcases"] == 1
-        assert saved_report["passed_testcases"] == 1
+        dyn_report_path = runs_root / run_ts / "dynamic_evaluation_report.json"
+        assert dyn_report_path.exists()
+        with open(dyn_report_path, "r", encoding="utf-8") as f:
+            saved_dyn = json.load(f)
+        assert saved_dyn["total_testcases"] == 1
+        assert saved_dyn["passed_testcases"] == 1
+
+        # 7. Execute legacy run_evaluation_suite wrapper
+        legacy_report = run_evaluation_suite(
+            runs_dir=runs_root,
+            run_timestamp=run_ts,
+            skip_llm=True,
+            dry_run=True,
+        )
+        assert legacy_report["total_testcases"] == 1
+        assert legacy_report["passed_testcases"] == 1
 
 
 def test_prune_old_runs():

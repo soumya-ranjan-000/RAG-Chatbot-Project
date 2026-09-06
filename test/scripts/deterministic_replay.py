@@ -1,32 +1,26 @@
 #!/usr/bin/env python3
 """
-DeepEval Deterministic Replay Evaluator for Golden Scenarios
-===========================================================
-Replays fixed user queries turn-by-turn from `conversational_golden/datasets/**/deterministic_reply/`
-against the live chatbot API to evaluate live model responses, tool calls, parameters,
-and trajectories without requiring an LLM simulator to generate new queries.
+DeepEval Deterministic Conversation Replay Runner
+=================================================
+Replays fixed user queries turn-by-turn from curated ground-truth datasets in
+`conversational_golden/datasets/**/deterministic_reply/` against the live chatbot API.
 
-Features:
-- Fixed User Script Execution (exact multi-turn user queries re-sent to live bot)
-- Turn-by-Turn Evaluation:
-  • expected_content (nature of response)
-  • expected_tools_call_order vs actual_tools_call_order
-  • expected_args vs actual args
-  • expected_response vs actual tool response
-  • expected_ui_widgets and citations
-  • SLA & negative policy constraints
-- Non-destructive testcase report exports
-- Full Scorecard & Summary Reporting
+During replay:
+1. Replays fixed, scripted user queries turn-by-turn.
+2. Captures live bot responses and authoritative LangSmith execution traces.
+3. Exports the full execution run into `test/run/<timestamp>/.../deterministic_reply/<variation_id>.json`
+   for downstream evaluation by `deterministic_eval.py`.
+4. Leaves the curated truth set in `datasets/` completely untouched.
 
 Usage:
-  # Dry-run preview of deterministic test scripts
-  python scripts/conv_replay_evaluator.py --dry-run
+  # Dry-run preview of deterministic replay
+  python scripts/deterministic_replay.py --dry-run
 
-  # Run replay evaluation against live backend
-  python scripts/conv_replay_evaluator.py --category manage_my_booking
+  # Run replay against live backend for a category
+  python scripts/deterministic_replay.py --category manage_my_booking
 
-  # Run specific variation
-  python scripts/conv_replay_evaluator.py -v FRUST_01_INVALID_FORMAT
+  # Replay specific variation
+  python scripts/deterministic_replay.py -v FRUST_01_INVALID_FORMAT
 """
 
 import argparse
@@ -38,18 +32,22 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
-
 import requests
 from dotenv import load_dotenv
 
 # Ensure project root & test directory are in python path
-test_dir = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(test_dir))
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_TEST_DIR = _SCRIPT_DIR.parent
+_PROJECT_ROOT = _TEST_DIR.parent
 
-load_dotenv(test_dir / ".env")
-load_dotenv(test_dir.parent / ".env")
+for p in [str(_TEST_DIR), str(_PROJECT_ROOT), str(_SCRIPT_DIR)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-# Purge all empty-string environment variables
+load_dotenv(_TEST_DIR / ".env")
+load_dotenv(_PROJECT_ROOT / ".env")
+
+# Purge empty-string environment variables
 for k, v in list(os.environ.items()):
     if v == "":
         os.environ.pop(k, None)
@@ -57,55 +55,24 @@ for k, v in list(os.environ.items()):
 try:
     from deepeval.test_case import ConversationalTestCase, Turn
 except ImportError:
-    pass
+    ConversationalTestCase = None
+    Turn = None
 
-from scripts.conv_simulator import (
+from scripts.dynamic_simulator import (
     DEFAULT_CHAT_API_URL,
     ChatApiCallbackHandler,
     extract_citations,
     extract_ui_widgets,
 )
+from scripts.conv_metrics import evaluate_tool_correctness
 from scripts.golden_bridge import (
+    _fetch_langsmith_compact_trace,
     export_simulated_testcase,
     get_default_datasets_dir,
     get_default_runs_dir,
-    group_turns_into_conversations,
-    load_dataset_for_evaluation,
     load_json_file,
     prune_old_runs,
 )
-
-
-def evaluate_tool_correctness(
-    actual_tools: List[Dict[str, Any]],
-    expected_tools: List[Dict[str, Any]],
-) -> Tuple[bool, List[str]]:
-    """
-    Evaluates whether the tools called match expected names, arguments, and responses.
-    """
-    errors = []
-    if len(actual_tools) != len(expected_tools):
-        errors.append(f"Tool count mismatch: expected {len(expected_tools)}, got {len(actual_tools)}")
-
-    for idx, exp_t in enumerate(expected_tools):
-        exp_name = exp_t.get("name")
-        if idx >= len(actual_tools):
-            errors.append(f"Missing expected tool call #{idx+1}: '{exp_name}'")
-            continue
-
-        act_t = actual_tools[idx]
-        act_name = act_t.get("name")
-        if act_name != exp_name:
-            errors.append(f"Tool #{idx+1} name mismatch: expected '{exp_name}', got '{act_name}'")
-
-        exp_args = exp_t.get("expected_args") or exp_t.get("args")
-        act_args = act_t.get("args") or {}
-        if exp_args:
-            for k, v in exp_args.items():
-                if act_args.get(k) != v:
-                    errors.append(f"Tool '{act_name}' arg mismatch for '{k}': expected '{v}', got '{act_args.get(k)}'")
-
-    return len(errors) == 0, errors
 
 
 def replay_testcase(
@@ -117,8 +84,8 @@ def replay_testcase(
     enrich_with_langsmith: bool = True,
 ) -> Dict[str, Any]:
     """
-    Loads a deterministic testcase JSON, extracts fixed user queries turn-by-turn,
-    sends them to the live chatbot, and evaluates the live assistant responses.
+    Loads a deterministic testcase JSON from datasets, extracts fixed user queries turn-by-turn,
+    sends them to the live chatbot, captures LangSmith trace, and exports the replayed run into test/run/.
     """
     data = load_json_file(test_case_file)
     if not data:
@@ -128,19 +95,12 @@ def replay_testcase(
     scenario_desc = data.get("scenario_description") or ""
     expected_outcome = data.get("expected_outcome") or ""
     raw_convs = data.get("conversations") or {}
-    expected_trajectory = (
-        (data.get("expected") or {}).get("expected_trajectory")
-        or data.get("expected_trajectory")
-        or (data.get("metadata") or {}).get("expected_trajectory")
-        or {}
-    )
 
-    # Extract user queries per turn
+    # Extract user queries per turn from unified_turns or conversations
     user_script: List[Dict[str, Any]] = []
     if data.get("unified_turns"):
         for ut in data["unified_turns"]:
             asst_exp = ut.get("expected") or {}
-            asst_act = ut.get("actual") or {}
             turn_label = f"turn {ut.get('turn', len(user_script) + 1)}"
             user_script.append({
                 "turn_label": turn_label,
@@ -150,11 +110,11 @@ def replay_testcase(
                 "expected_tools": [
                     {
                         "name": t.get("name"),
-                        "expected_args": t.get("expected_args"),
+                        "expected_args": t.get("expected_args") or t.get("args"),
                         "expected_response": t.get("expected_response"),
                     }
                     for t in asst_exp.get("expected_tools", [])
-                    if t.get("expected_args") or t.get("expected_response")
+                    if t.get("expected_args") or t.get("args") or t.get("expected_response")
                 ],
             })
     else:
@@ -171,13 +131,12 @@ def replay_testcase(
                         [
                             {
                                 "name": t.get("name"),
-                                "expected_args": t.get("expected_args"),
+                                "expected_args": t.get("expected_args") or t.get("args"),
                                 "expected_response": t.get("expected_response"),
                             }
-                            for t in asst_msg.get("actual_tools_called", [])
-                            if t.get("expected_args") or t.get("expected_response")
+                            for t in (asst_msg.get("expected_tools") or asst_msg.get("actual_tools_called") or [])
                         ]
-                        if asst_msg and asst_msg.get("actual_tools_called")
+                        if asst_msg
                         else []
                     ),
                 })
@@ -218,17 +177,15 @@ def replay_testcase(
         )
         replayed_turns.append(asst_turn_obj)
 
-    # Fetch authoritative LangSmith execution trace for replay evaluation
+    # Fetch authoritative LangSmith execution trace
     compact_ls_export = None
     if not dry_run and enrich_with_langsmith and new_thread_id:
-        from scripts.golden_bridge import _fetch_langsmith_compact_trace
         compact_ls_export = _fetch_langsmith_compact_trace(new_thread_id)
 
     ls_turns = (compact_ls_export.get("turns") if compact_ls_export else []) or []
 
-    # 3. Evaluate replay turns against LangSmith trace
+    # Console feedback on live tools called per turn
     for idx, s_turn in enumerate(user_script, start=1):
-        user_query = s_turn["user_content"]
         asst_turn_idx = (idx * 2) - 1
         asst_turn_obj = replayed_turns[asst_turn_idx] if asst_turn_idx < len(replayed_turns) else Turn(role="assistant", content="")
         ls_t = ls_turns[idx - 1] if idx - 1 < len(ls_turns) else None
@@ -243,7 +200,6 @@ def replay_testcase(
         ]
         actual_order = [tc.get("tool_name") for tc in (ls_t.get("tools_call", []) if ls_t else []) if tc.get("tool_name")]
 
-        # Tool correctness check
         tool_passed, tool_errors = evaluate_tool_correctness(
             actual_tools=actual_tools,
             expected_tools=s_turn.get("expected_tools") or [],
@@ -252,28 +208,7 @@ def replay_testcase(
             tool_errors.append(f"No LangSmith execution trace found for thread {new_thread_id} turn {idx}")
             tool_passed = False
 
-        # Tool order check
-        exp_order = s_turn.get("expected_tools_order") or []
-        order_passed = (actual_order == exp_order) if exp_order else True
-        if not order_passed:
-            tool_errors.append(f"Tool order mismatch: expected {exp_order}, got {actual_order}")
-
-        turn_eval = {
-            "turn": idx,
-            "user_query": user_query,
-            "assistant_content": asst_turn_obj.content,
-            "expected_content": s_turn.get("expected_content"),
-            "actual_tools": actual_tools,
-            "expected_tools": s_turn.get("expected_tools"),
-            "actual_tools_order": actual_order,
-            "expected_tools_order": exp_order,
-            "tool_correctness_passed": tool_passed and order_passed,
-            "tool_errors": tool_errors,
-            "metrics": ls_t.get("tokens") if ls_t else None,
-        }
-        turn_evaluations.append(turn_eval)
-
-        status_sym = "✅" if (tool_passed and order_passed) else "⚠️"
+        status_sym = "✅" if tool_passed else "⚠️"
         print(f"   🤖 Turn {idx} Bot ({status_sym}): \"{asst_turn_obj.content[:80]}...\"")
         if tool_errors:
             for err in tool_errors:
@@ -283,7 +218,6 @@ def replay_testcase(
     new_metadata = dict(data.get("metadata") or {})
     new_metadata["thread_id"] = new_thread_id
     new_metadata["replayed_from_file"] = str(test_case_file)
-    new_metadata["replay_evaluations"] = turn_evaluations
 
     live_test_case = ConversationalTestCase(
         turns=replayed_turns,
@@ -294,7 +228,7 @@ def replay_testcase(
         metadata=new_metadata,
     )
 
-    # Export replayed run strictly into test/run/<date_time>/ (truth set in datasets/ remains untouched)
+    # Export replayed run strictly into test/run/<timestamp>/.../deterministic_reply/
     export_result = export_simulated_testcase(
         test_case=live_test_case,
         datasets_dir=None,
@@ -307,14 +241,11 @@ def replay_testcase(
     )
     print(f"   💾 Exported Replay Run: {Path(export_result['json_path']).name}")
 
-    all_passed = all(t["tool_correctness_passed"] for t in turn_evaluations)
     return {
-        "status": "passed" if all_passed else "failed",
+        "status": "replayed",
         "testcase_id": case_id,
         "thread_id": new_thread_id,
-        "total_turns": len(turn_evaluations),
-        "turn_evaluations": turn_evaluations,
-        "all_passed": all_passed,
+        "total_turns": len(user_script),
         "export_path": export_result["json_path"],
     }
 
@@ -331,14 +262,13 @@ def run_replay_suite(
     enrich_with_langsmith: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    Crawls deterministic_reply folders and runs replay evaluations.
+    Crawls deterministic_reply folders in datasets/ and replays each testcase against live bot.
     """
     root = Path(datasets_dir) if datasets_dir else get_default_datasets_dir()
     if not root.exists():
         print(f"[Error] Datasets directory not found at: {root}")
         return []
 
-    # Find all testcase JSONs in deterministic_reply / deterministic_replay
     matching_files: List[Path] = []
     for json_file in sorted(root.rglob("*.json")):
         if json_file.name == "dataset.json":
@@ -347,7 +277,6 @@ def run_replay_suite(
         if parent_name not in ["deterministic_reply", "deterministic_replay"]:
             continue
 
-        # Check filters
         parts = [p.lower() for p in json_file.parts]
         if category_filter and category_filter.lower() not in parts:
             continue
@@ -381,7 +310,7 @@ def run_replay_suite(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="DeepEval Deterministic Replay Evaluator for Golden Datasets."
+        description="DeepEval Deterministic Conversation Replay Runner."
     )
     parser.add_argument(
         "--category",
@@ -453,7 +382,7 @@ def main():
     run_timestamp = args.run_timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 
     print("=" * 70)
-    print("🔁 DeepEval Deterministic Conversational Replay Evaluator")
+    print("🔁 DeepEval Deterministic Conversational Replay Runner")
     print("=" * 70)
     print(f"🔗 Target Chat API:  {args.backend_url}")
     print(f"🎯 Filter Category:  {args.category or 'All'}")
@@ -480,10 +409,10 @@ def main():
     duration = round(time.time() - start_time, 2)
 
     if not args.dry_run and results:
-        passed_count = sum(1 for r in results if r.get("all_passed"))
         print("\n" + "=" * 70)
-        print(f"🏁 Replay Evaluation Complete in {duration}s")
-        print(f"📊 Passed: {passed_count}/{len(results)} | Failed: {len(results) - passed_count}")
+        print(f"🏁 Replay Execution Complete in {duration}s")
+        print(f"📊 Replayed: {len(results)} testcase(s)")
+        print(f"📁 Runs saved under: {(runs_root / run_timestamp).resolve()}")
         if args.retention_limit and args.retention_limit > 0:
             prune_old_runs(runs_root=runs_root, keep_last=args.retention_limit)
         print("=" * 70)
@@ -491,3 +420,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

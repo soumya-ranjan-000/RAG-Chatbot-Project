@@ -1,18 +1,23 @@
+#!/usr/bin/env python3
 """
-DeepEval Conversational Simulator for Golden Scenarios
-======================================================
-Simulates multi-turn conversations against the chatbot backend using
+DeepEval Dynamic Conversational Simulator for Golden Scenarios
+=============================================================
+Simulates multi-turn conversations against the live chatbot backend using
 DeepEval's `ConversationSimulator` and scenario rules defined in
 `conversational_golden/rules`.
 
-Exports generated multi-turn conversations as structured JSON datasets into
-`conversational_golden/datasets/` preserving the golden hierarchy and
-traceability links.
+Features:
+- Dynamic multi-turn persona simulation with DeepEval
+- Live chatbot communication via SSE streaming API callback
+- Real-time LangSmith trace enrichment
+- Exports simulated runs strictly into `test/run/<timestamp>/` using the unified schema
+- Does NOT pollute or alter ground-truth test cases in `conversational_golden/datasets/`
 """
 
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -22,7 +27,7 @@ from typing import Any, Callable, Dict, List, Optional
 import requests
 from dotenv import load_dotenv
 
-# 1. Robust sys.path bootstrap (ensures `import scripts...` works from any CWD)
+# 1. Robust sys.path bootstrap
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _TEST_DIR = _SCRIPT_DIR.parent
 _PROJECT_ROOT = _TEST_DIR.parent
@@ -37,7 +42,7 @@ parent_env = _TEST_DIR / ".env"
 if parent_env.exists():
     load_dotenv(parent_env)
 
-# Purge all empty-string environment variables so SDKs (OpenAI, Gemini, Confident) fall back to defaults
+# Purge empty-string environment variables
 for k, v in list(os.environ.items()):
     if v == "":
         os.environ.pop(k, None)
@@ -52,10 +57,8 @@ from scripts.golden_bridge import (
     discover_scenario_directories,
     export_scenario_summary,
     export_simulated_testcase,
-    get_default_datasets_dir,
     get_default_rules_dir,
     get_default_runs_dir,
-    is_deterministic_mode,
     load_scenario_bundle,
     prune_old_runs,
 )
@@ -67,31 +70,24 @@ DEFAULT_CHAT_API_URL = os.getenv("CHAT_API_URL", "http://localhost:8000/chat")
 def get_simulator_model(model_name: Optional[str] = None):
     """
     Resolves and instantiates the LLM judge/simulator model.
-    Prioritizes Gemini if GEMINI_API_KEY is available, else falls back to OpenAI GPT.
+    Prioritizes OpenAI or Gemini based on environment variables.
     """
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
 
     chosen_model = model_name or os.getenv("SIMULATOR_MODEL") or os.getenv("GEMINI_MODEL_NAME")
 
-    # if gemini_key and (not chosen_model or "gemini" in chosen_model.lower()):
-    #     m = chosen_model or "gemini-3.6-flash"
-    #     return GeminiModel(model=m, api_key=gemini_key)
-    # elif openai_key:
-    #     m = chosen_model or os.getenv("OPENAI_MODEL_NAME") or "gpt-4o-mini"
-    #     return OpenAIModel(model=m, api_key=openai_key)
-    # elif gemini_key:
-    #     return GeminiModel(model="gemini-3.6-flash", api_key=gemini_key)
-    # else:
-    #     print("[Warning] No GEMINI_API_KEY or OPENAI_API_KEY found. Simulator will use default provider configuration.")
-    #     return None
-
-    return OpenAIModel(model="gpt-4o-mini", api_key=openai_key)
-
-    
-
-
-import re
+    if openai_key and (not chosen_model or "gpt" in chosen_model.lower()):
+        m = chosen_model or os.getenv("OPENAI_MODEL_NAME") or "gpt-4o-mini"
+        return OpenAIModel(model=m, api_key=openai_key)
+    elif gemini_key:
+        m = chosen_model or "gemini-2.5-flash"
+        return GeminiModel(model=m, api_key=gemini_key)
+    elif openai_key:
+        return OpenAIModel(model="gpt-4o-mini", api_key=openai_key)
+    else:
+        print("[Warning] No OPENAI_API_KEY or GEMINI_API_KEY found. Simulator will use default provider configuration.")
+        return None
 
 
 def extract_ui_widgets(content: str) -> List[Dict[str, Any]]:
@@ -236,7 +232,6 @@ def create_chat_api_callback(api_url: str = DEFAULT_CHAT_API_URL) -> ChatApiCall
 def run_simulations_for_scenario(
     scenario_dir: Path,
     simulator: Optional[ConversationSimulator] = None,
-    datasets_dir: Optional[Path] = None,
     runs_dir: Optional[Path] = None,
     run_timestamp: Optional[str] = None,
     enrich_with_langsmith: bool = True,
@@ -244,12 +239,11 @@ def run_simulations_for_scenario(
     variation_filter: Optional[str] = None,
     max_turns: int = 4,
     dry_run: bool = False,
-    target_mode: str = "dynamic_simulation",
     overwrite: bool = False,
 ) -> List[ConversationalTestCase]:
     """
-    Executes simulations for all persona variations under a single scenario folder.
-    Exports individual testcase JSON files into test/run/<date_time> or datasets hierarchy.
+    Executes dynamic simulations for all persona variations under a single scenario folder.
+    Exports individual testcase JSON files strictly into test/run/<run_timestamp>/.../dynamic_simulation/.
     """
     bundle = load_scenario_bundle(scenario_dir)
     goldens = build_conversational_goldens(bundle, variation_id_filter=variation_filter)
@@ -259,7 +253,7 @@ def run_simulations_for_scenario(
 
     print(f"\n📂 Scenario: [{bundle['category']}] -> {bundle['scenario_name']}")
     print(f"   Config: {bundle['scenario_config_file']}")
-    print(f"   Target Folder: {target_mode}")
+    print(f"   Mode: Dynamic Simulation")
     print(f"   Variations to simulate: {len(goldens)}")
 
     simulated_cases: List[ConversationalTestCase] = []
@@ -275,13 +269,11 @@ def run_simulations_for_scenario(
             print(f"      • Scenario: {golden.scenario}")
             print(f"      • Expected Outcome: {golden.expected_outcome}")
             print(f"      • Context Chunks: {len(golden.context) if golden.context else 0}")
-            print(f"      • Target Destination: {target_mode}")
             print(f"      • Variation File: {g_link.get('variation_file')}")
             continue
 
         print(f"\n   🤖 [{idx}/{len(goldens)}] Simulating: {var_id} ({p_name})...")
 
-        # Run DeepEval simulation
         if simulator:
             test_cases = simulator.simulate(
                 conversational_goldens=[golden],
@@ -292,20 +284,19 @@ def run_simulations_for_scenario(
 
             active_thread_id = callback_handler.last_thread_id if callback_handler else None
 
-            # Export individual testcase into unified runs/datasets hierarchy
+            # Export individual testcase strictly into test/run/<timestamp>/.../dynamic_simulation/
             export_result = export_simulated_testcase(
                 test_case=sim_tc,
-                datasets_dir=datasets_dir,
+                datasets_dir=None,
                 runs_dir=runs_dir,
                 run_timestamp=run_timestamp,
                 thread_id=active_thread_id,
-                target_mode=target_mode,
+                target_mode="dynamic_simulation",
                 overwrite=overwrite,
                 enrich_with_langsmith=enrich_with_langsmith,
             )
             print(f"   ✅ Saved testcase: {export_result['json_path']}")
 
-            # Also store in testcase store for legacy LangSmith compatibility if configured
             try:
                 conversation_turns = [
                     {"role": turn.role, "content": turn.content}
@@ -327,14 +318,14 @@ def run_simulations_for_scenario(
             except Exception:
                 pass
 
-    # Export scenario-level summary dataset & markdown
     if simulated_cases:
         summary_result = export_scenario_summary(
             scenario_rel_dir=bundle["scenario_rel_dir"],
             test_cases=simulated_cases,
-            datasets_dir=datasets_dir,
+            datasets_dir=None,
             runs_dir=runs_dir,
             run_timestamp=run_timestamp,
+            target_mode="dynamic_simulation",
         )
         print(f"   📊 Consolidated Dataset: {summary_result['dataset_json']}")
         print(f"   📝 Markdown Transcript:  {summary_result['report_md']}")
@@ -344,7 +335,7 @@ def run_simulations_for_scenario(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="DeepEval Multi-Turn Conversational Simulator for Golden Scenarios."
+        description="DeepEval Dynamic Multi-Turn Conversational Simulator for Golden Scenarios."
     )
     parser.add_argument(
         "--category",
@@ -368,17 +359,9 @@ def main():
         help="Filter by specific variation ID (e.g. 'FRUST_01_INVALID_FORMAT').",
     )
     parser.add_argument(
-        "--target",
-        "--target-mode",
-        type=str,
-        default="dynamic",
-        choices=["dynamic", "dynamic_simulation", "deterministic", "deterministic_replay", "deterministic_reply"],
-        help="Target folder/mode for generated testcases: 'dynamic' (default) or 'deterministic' (for QA baseline creation).",
-    )
-    parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Overwrite existing testcase JSON files instead of creating timestamped versions.",
+        help="Overwrite existing testcase JSON files.",
     )
     parser.add_argument(
         "--max-turns",
@@ -410,13 +393,7 @@ def main():
         "--rules-dir",
         type=str,
         default=None,
-        help="Custom path to rules directory (default: 'conversational_golden/rules').",
-    )
-    parser.add_argument(
-        "--datasets-dir",
-        type=str,
-        default=None,
-        help="Legacy custom path to datasets output directory.",
+        help="Custom path to rules directory (default: 'test/conversational_golden/rules').",
     )
     parser.add_argument(
         "--run-timestamp",
@@ -446,22 +423,14 @@ def main():
     args = parser.parse_args()
 
     rules_root = Path(args.rules_dir) if args.rules_dir else get_default_rules_dir()
-    datasets_root = (
-        Path(args.datasets_dir)
-        if args.datasets_dir
-        else (get_default_datasets_dir() if is_deterministic_mode(args.target) else None)
-    )
     runs_root = Path(args.run_dir) if args.run_dir else get_default_runs_dir()
     run_timestamp = args.run_timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 
     print("=" * 70)
-    print("🚀 DeepEval Conversational Golden Simulator")
+    print("🚀 DeepEval Dynamic Conversational Golden Simulator")
     print("=" * 70)
     print(f"📁 Rules Directory:    {rules_root.resolve()}")
-    if datasets_root:
-        print(f"📁 Datasets Directory: {datasets_root.resolve()}")
     print(f"📁 Runs Directory:     {(runs_root / run_timestamp).resolve()}")
-    print(f"🎯 Target Mode:        {args.target}")
     print(f"🔗 Target Chat API:    {args.backend_url}")
     print(f"🎯 Filter Category:    {args.category or 'All'}")
     print(f"🎯 Filter Scenario:    {args.scenario or 'All'}")
@@ -472,13 +441,12 @@ def main():
     print(f"⚙️  Dry-Run Mode:       {args.dry_run}")
     print("=" * 70)
 
-    # 1. Discover all scenario directories
+    # 1. Discover scenario directories
     all_scenario_dirs = discover_scenario_directories(rules_root)
     if not all_scenario_dirs:
         print(f"[Error] No scenario directories found in {rules_root}")
         sys.exit(1)
 
-    # Filter scenario directories if category or scenario specified
     target_dirs: List[Path] = []
     for s_dir in all_scenario_dirs:
         bundle = load_scenario_bundle(s_dir, rules_root=rules_root)
@@ -524,7 +492,6 @@ def main():
         cases = run_simulations_for_scenario(
             scenario_dir=s_dir,
             simulator=simulator,
-            datasets_dir=datasets_root,
             runs_dir=runs_root,
             run_timestamp=run_timestamp,
             enrich_with_langsmith=args.enrich_langsmith,
@@ -532,7 +499,6 @@ def main():
             variation_filter=args.variation,
             max_turns=args.max_turns,
             dry_run=args.dry_run,
-            target_mode=args.target,
             overwrite=args.overwrite,
         )
         total_simulated += len(cases)
@@ -543,10 +509,7 @@ def main():
         print(f"🎉 Dry run complete in {duration}s. All goldens validated successfully.")
     else:
         print(f"🎉 Completed simulation of {total_simulated} conversation(s) in {duration}s.")
-        if datasets_root:
-            print(f"📁 Datasets generated under: {datasets_root.resolve()}")
-        else:
-            print(f"📁 Runs generated under:     {(runs_root / run_timestamp).resolve()}")
+        print(f"📁 Runs generated under: {(runs_root / run_timestamp).resolve()}")
 
         if args.retention_limit and args.retention_limit > 0:
             prune_old_runs(runs_root=runs_root, keep_last=args.retention_limit)
