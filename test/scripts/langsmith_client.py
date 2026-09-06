@@ -486,6 +486,8 @@ def get_traces_by_thread_id(
             f'eq(metadata.configurable.thread_id, "{thread_id}")',
             f'eq(metadata.session_id, "{thread_id}")',
             f'eq(metadata.conversation_id, "{thread_id}")',
+            f'and(eq(metadata_key, "thread_id"), eq(metadata_value, "{thread_id}"))',
+            f'eq(metadata_value, "{thread_id}")',
             f'eq(session_name, "{thread_id}")',
         ]
 

@@ -54,7 +54,9 @@ from scripts.golden_bridge import (
     export_simulated_testcase,
     get_default_datasets_dir,
     get_default_rules_dir,
+    get_default_runs_dir,
     load_scenario_bundle,
+    prune_old_runs,
 )
 from scripts.testcase_store import save_simulator_case
 
@@ -172,9 +174,6 @@ class ChatApiCallbackHandler:
 
             assistant_content = ""
             turn_run_id: Optional[str] = None
-            actual_tools_called: List[Dict[str, Any]] = []
-            actual_tools_call_order: List[str] = []
-            turn_metrics: Optional[Dict[str, Any]] = None
 
             for line in response.iter_lines(decode_unicode=True):
                 if not line:
@@ -197,39 +196,6 @@ class ChatApiCallbackHandler:
                         elif event_type == "token":
                             assistant_content += data.get("content", "")
 
-                        elif event_type == "tool_call":
-                            t_name = data.get("name")
-                            t_args = data.get("args")
-                            if t_name:
-                                actual_tools_call_order.append(t_name)
-                                actual_tools_called.append({
-                                    "name": t_name,
-                                    "args": t_args,
-                                    "result": None,
-                                })
-
-                        elif event_type == "tool_result":
-                            t_name = data.get("name")
-                            t_args = data.get("args")
-                            t_result = data.get("result")
-
-                            # Match with corresponding pending tool call or append
-                            matched = False
-                            for call in reversed(actual_tools_called):
-                                if call.get("name") == t_name and call.get("result") is None:
-                                    call["result"] = t_result
-                                    matched = True
-                                    break
-                            if not matched:
-                                actual_tools_called.append({
-                                    "name": t_name,
-                                    "args": t_args,
-                                    "result": t_result,
-                                })
-
-                        elif event_type == "metrics":
-                            turn_metrics = data.get("metrics")
-
                         elif event_type == "error":
                             print(f"[Chat API Error] {data.get('message')}")
 
@@ -241,11 +207,7 @@ class ChatApiCallbackHandler:
             turn_metadata: Dict[str, Any] = {
                 "thread_id": self.last_thread_id or thread_id,
                 "run_id": turn_run_id,
-                "actual_tools_called": actual_tools_called,
-                "actual_tools_call_order": actual_tools_call_order,
             }
-            if turn_metrics:
-                turn_metadata["metrics"] = turn_metrics
 
             return Turn(
                 role="assistant",
@@ -274,6 +236,9 @@ def run_simulations_for_scenario(
     scenario_dir: Path,
     simulator: Optional[ConversationSimulator] = None,
     datasets_dir: Optional[Path] = None,
+    runs_dir: Optional[Path] = None,
+    run_timestamp: Optional[str] = None,
+    enrich_with_langsmith: bool = True,
     callback_handler: Optional[ChatApiCallbackHandler] = None,
     variation_filter: Optional[str] = None,
     max_turns: int = 4,
@@ -283,7 +248,7 @@ def run_simulations_for_scenario(
 ) -> List[ConversationalTestCase]:
     """
     Executes simulations for all persona variations under a single scenario folder.
-    Exports individual testcase JSON files into target_mode folder and updates scenario summaries.
+    Exports individual testcase JSON files into test/run/<date_time> or datasets hierarchy.
     """
     bundle = load_scenario_bundle(scenario_dir)
     goldens = build_conversational_goldens(bundle, variation_id_filter=variation_filter)
@@ -326,13 +291,16 @@ def run_simulations_for_scenario(
 
             active_thread_id = callback_handler.last_thread_id if callback_handler else None
 
-            # Export individual testcase to datasets hierarchy with target mode & safeguard
+            # Export individual testcase into unified runs/datasets hierarchy
             export_result = export_simulated_testcase(
                 test_case=sim_tc,
                 datasets_dir=datasets_dir,
+                runs_dir=runs_dir,
+                run_timestamp=run_timestamp,
                 thread_id=active_thread_id,
                 target_mode=target_mode,
                 overwrite=overwrite,
+                enrich_with_langsmith=enrich_with_langsmith,
             )
             print(f"   ✅ Saved testcase: {export_result['json_path']}")
 
@@ -364,6 +332,8 @@ def run_simulations_for_scenario(
             scenario_rel_dir=bundle["scenario_rel_dir"],
             test_cases=simulated_cases,
             datasets_dir=datasets_dir,
+            runs_dir=runs_dir,
+            run_timestamp=run_timestamp,
         )
         print(f"   📊 Consolidated Dataset: {summary_result['dataset_json']}")
         print(f"   📝 Markdown Transcript:  {summary_result['report_md']}")
@@ -445,24 +415,55 @@ def main():
         "--datasets-dir",
         type=str,
         default=None,
-        help="Custom path to datasets output directory (default: 'conversational_golden/datasets').",
+        help="Legacy custom path to datasets output directory.",
+    )
+    parser.add_argument(
+        "--run-timestamp",
+        type=str,
+        default=None,
+        help="Run timestamp folder name under test/run/ (default: current UTC timestamp 'YYYY-MM-DD_HH-MM-SS').",
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=str,
+        default=None,
+        help="Custom root directory for run exports (default: 'test/run').",
+    )
+    parser.add_argument(
+        "--enrich-langsmith",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enrich test cases with real-time LangSmith execution traces (default: True).",
+    )
+    parser.add_argument(
+        "--retention-limit",
+        type=int,
+        default=20,
+        help="Maximum number of historical execution runs to retain in test/run/ (default: 20, 0 to disable).",
     )
 
     args = parser.parse_args()
 
     rules_root = Path(args.rules_dir) if args.rules_dir else get_default_rules_dir()
-    datasets_root = Path(args.datasets_dir) if args.datasets_dir else get_default_datasets_dir()
+    datasets_root = Path(args.datasets_dir) if args.datasets_dir else None
+    runs_root = Path(args.run_dir) if args.run_dir else get_default_runs_dir()
+    run_timestamp = args.run_timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 
     print("=" * 70)
     print("🚀 DeepEval Conversational Golden Simulator")
     print("=" * 70)
     print(f"📁 Rules Directory:    {rules_root.resolve()}")
-    print(f"📁 Datasets Directory: {datasets_root.resolve()}")
+    if datasets_root:
+        print(f"📁 Datasets Directory: {datasets_root.resolve()}")
+    else:
+        print(f"📁 Runs Directory:     {(runs_root / run_timestamp).resolve()}")
     print(f"🔗 Target Chat API:    {args.backend_url}")
     print(f"🎯 Filter Category:    {args.category or 'All'}")
     print(f"🎯 Filter Scenario:    {args.scenario or 'All'}")
     print(f"🎯 Filter Variation:   {args.variation or 'All'}")
     print(f"🔁 Max User Turns:     {args.max_turns}")
+    print(f"🔍 LangSmith Traces:   {args.enrich_langsmith}")
+    print(f"🧹 Retention Limit:    {args.retention_limit}")
     print(f"⚙️  Dry-Run Mode:       {args.dry_run}")
     print("=" * 70)
 
@@ -519,6 +520,9 @@ def main():
             scenario_dir=s_dir,
             simulator=simulator,
             datasets_dir=datasets_root,
+            runs_dir=runs_root,
+            run_timestamp=run_timestamp,
+            enrich_with_langsmith=args.enrich_langsmith,
             callback_handler=callback,
             variation_filter=args.variation,
             max_turns=args.max_turns,
@@ -534,7 +538,13 @@ def main():
         print(f"🎉 Dry run complete in {duration}s. All goldens validated successfully.")
     else:
         print(f"🎉 Completed simulation of {total_simulated} conversation(s) in {duration}s.")
-        print(f"📁 Datasets generated under: {datasets_root.resolve()}")
+        if datasets_root:
+            print(f"📁 Datasets generated under: {datasets_root.resolve()}")
+        else:
+            print(f"📁 Runs generated under:     {(runs_root / run_timestamp).resolve()}")
+
+        if args.retention_limit and args.retention_limit > 0:
+            prune_old_runs(runs_root=runs_root, keep_last=args.retention_limit)
     print("=" * 70)
 
 

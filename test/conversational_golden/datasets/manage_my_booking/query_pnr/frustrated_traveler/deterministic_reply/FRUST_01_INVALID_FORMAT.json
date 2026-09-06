@@ -1,0 +1,196 @@
+{
+  "testcase_id": "FRUST_01_INVALID_FORMAT",
+  "target_mode": "deterministic_reply",
+  "scenario_description": "The user wants to check the status of their flight booking using a PNR. Ask for flight status but provide a 5-letter PNR ('AB123'). When told it is invalid, act annoyed and refuse to provide the correct one.",
+  "expected_outcome": "The chatbot politely explains the 6-character requirement and offers a human handoff.",
+  "expected": {
+    "scenario_description": "The user wants to check the status of their flight booking using a PNR. Ask for flight status but provide a 5-letter PNR ('AB123'). When told it is invalid, act annoyed and refuse to provide the correct one.",
+    "expected_outcome": "The chatbot politely explains the 6-character requirement and offers a human handoff.",
+    "expected_trajectory": {
+      "expected_tools": [
+        {
+          "name": "check_booking_status",
+          "expected_args": {
+            "pnr": "AB123"
+          },
+          "expected_response": {
+            "error": "Booking not found for PNR AB123."
+          }
+        }
+      ],
+      "expected_tools_order": [
+        "check_booking_status"
+      ],
+      "expected_ui_widgets": [],
+      "expected_entities": {
+        "pnr": "AB123"
+      },
+      "forbidden_actions": [
+        "Do not invent fake flight details when an invalid PNR is provided",
+        "Do not refuse human handoff when user becomes frustrated"
+      ],
+      "expected_citations": [],
+      "performance_sla": {
+        "max_ttft_ms": 2000,
+        "max_turn_latency_ms": 6000,
+        "max_total_tokens": 4000
+      }
+    },
+    "expected_turns": [
+      {
+        "turn": 1,
+        "review_only": true,
+        "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code.",
+        "expected_tools_call_order": [
+          "check_booking_status"
+        ]
+      },
+      {
+        "turn": 2,
+        "review_only": true,
+        "qa_note": "The assistant should acknowledge the frustration, restate the 6-character PNR rule calmly, and offer an alternative path such as checking by flight number/date if useful."
+      },
+      {
+        "turn": 3,
+        "review_only": true,
+        "qa_note": "The assistant should empathize with the user and suggest contacting human customer support when the user is frustrated and unable to provide the required details."
+      },
+      {
+        "turn": 4,
+        "review_only": true,
+        "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
+      }
+    ]
+  },
+  "persona": {
+    "name": "Frustrated Traveler",
+    "characteristics": "Highly impatient, easily annoyed, and uses short, aggressive sentences."
+  },
+  "context": [
+    "A valid PNR must be exactly 6 alphanumeric characters.",
+    "The user's actual valid PNR is 'AB1234', which is for an AI-101 flight to Dubai, Status: Confirmed.",
+    "Airline Policy for PNR Query:\n1. PNR (Passenger Name Record) must consist of exactly 6 uppercase alphanumeric characters.\n2. If the user provides a PNR with less or more than 6 characters, the assistant must inform the user about the 6-character format.\n3. If the user is uncooperative or requests a human agent, the assistant must offer immediate human support handoff without repeated interrogation.\n4. Booking AB1234 details: Flight AI-101 from Bangalore (BLR) to Dubai (DXB), Departure 10:30 AM, Status: Confirmed, Passenger: Jane Smith."
+  ],
+  "conversations": {
+    "turn 1": [
+      {
+        "role": "user",
+        "content": "I need to check my flight status. My PNR is AB123. What's going on with it?"
+      },
+      {
+        "role": "assistant",
+        "expected_content": null,
+        "expected_tools_call_order": [
+          "check_booking_status"
+        ],
+        "expected_tools": [],
+        "qa_note": null
+      }
+    ],
+    "turn 2": [
+      {
+        "role": "user",
+        "content": "Are you kidding me? Just check it again. I know my PNR is right!"
+      },
+      {
+        "role": "assistant",
+        "expected_content": null,
+        "expected_tools_call_order": [],
+        "expected_tools": [],
+        "qa_note": null
+      }
+    ],
+    "turn 3": [
+      {
+        "role": "user",
+        "content": "I told you, it's AB123! Just find my flight already!"
+      },
+      {
+        "role": "assistant",
+        "expected_content": null,
+        "expected_tools_call_order": [],
+        "expected_tools": [],
+        "qa_note": null
+      }
+    ],
+    "turn 4": [
+      {
+        "role": "user",
+        "content": "This is ridiculous! Just tell me what you can find with that PNR already!"
+      },
+      {
+        "role": "assistant",
+        "expected_content": null,
+        "expected_tools_call_order": [],
+        "expected_tools": [],
+        "qa_note": null
+      }
+    ]
+  },
+  "total_turns": 4,
+  "promoted_from_run": "test/run/2026-09-06_13-46-41/manage_my_booking/query_pnr/frustrated_traveler/dynamic_simulation/FRUST_01_INVALID_FORMAT.json",
+  "promoted_at": "2026-09-06T14:27:49.512530+00:00",
+  "metadata": {
+    "rule_category": "manage_my_booking",
+    "scenario_name": "query_pnr",
+    "scenario_rel_dir": "manage_my_booking/query_pnr",
+    "scenario_id": "SCENARIO_PNR_01",
+    "persona_slug": "frustrated_traveler",
+    "persona_name": "Frustrated Traveler",
+    "persona_description": "Highly impatient, easily annoyed, and uses short, aggressive sentences.",
+    "variation_id": "FRUST_01_INVALID_FORMAT",
+    "variation_file": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/variations/frustrated_traveler.json",
+    "scenario_config_file": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/scenario_config.json",
+    "expected_metrics": {
+      "metrics": [
+        {
+          "name": "ConversationalRelevancyMetric",
+          "threshold": 0.7,
+          "description": "Evaluates whether each turn's response is directly relevant to the user query and conversational context."
+        },
+        {
+          "name": "RoleAdherenceMetric",
+          "threshold": 0.8,
+          "description": "Ensures the chatbot adheres strictly to the airline booking assistant persona and policies."
+        },
+        {
+          "name": "FaithfulnessMetric",
+          "threshold": 0.7,
+          "description": "Checks that the chatbot does not hallucinate booking details outside the context."
+        },
+        {
+          "name": "ToolCorrectnessMetric",
+          "threshold": 1.0,
+          "description": "Verifies that the required tools were called with the correct extracted parameters and received valid responses."
+        },
+        {
+          "name": "ToolCallOrderMetric",
+          "threshold": 1.0,
+          "description": "Ensures tool calls occurred in the exact prerequisite chronological order."
+        },
+        {
+          "name": "UIWidgetFormatMetric",
+          "threshold": 1.0,
+          "description": "Validates that all expected markdown code blocks (e.g. ```tickets, ```flights) contain syntactically valid JSON matching the UI schema."
+        },
+        {
+          "name": "NegativeConstraintMetric",
+          "threshold": 1.0,
+          "description": "Asserts that forbidden policy actions were strictly avoided throughout the multi-turn exchange."
+        }
+      ]
+    },
+    "golden_link": {
+      "rule_category": "manage_my_booking",
+      "scenario_name": "query_pnr",
+      "scenario_rel_dir": "manage_my_booking/query_pnr",
+      "scenario_id": "SCENARIO_PNR_01",
+      "scenario_config_path": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/scenario_config.json",
+      "variation_file": "/home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/rules/manage_my_booking/query_pnr/variations/frustrated_traveler.json",
+      "persona_slug": "frustrated_traveler",
+      "persona_name": "Frustrated Traveler",
+      "persona_description": "Highly impatient, easily annoyed, and uses short, aggressive sentences.",
+      "variation_id": "FRUST_01_INVALID_FORMAT"
+    }
+  }
+}

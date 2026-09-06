@@ -68,9 +68,11 @@ from scripts.conv_simulator import (
 from scripts.golden_bridge import (
     export_simulated_testcase,
     get_default_datasets_dir,
+    get_default_runs_dir,
     group_turns_into_conversations,
     load_dataset_for_evaluation,
     load_json_file,
+    prune_old_runs,
 )
 
 
@@ -110,6 +112,9 @@ def replay_testcase(
     test_case_file: Path,
     api_url: str = DEFAULT_CHAT_API_URL,
     dry_run: bool = False,
+    runs_dir: Optional[Union[str, Path]] = None,
+    run_timestamp: Optional[str] = None,
+    enrich_with_langsmith: bool = True,
 ) -> Dict[str, Any]:
     """
     Loads a deterministic testcase JSON, extracts fixed user queries turn-by-turn,
@@ -123,33 +128,59 @@ def replay_testcase(
     scenario_desc = data.get("scenario_description") or ""
     expected_outcome = data.get("expected_outcome") or ""
     raw_convs = data.get("conversations") or {}
-    expected_trajectory = data.get("expected_trajectory") or (data.get("metadata") or {}).get("expected_trajectory") or {}
+    expected_trajectory = (
+        (data.get("expected") or {}).get("expected_trajectory")
+        or data.get("expected_trajectory")
+        or (data.get("metadata") or {}).get("expected_trajectory")
+        or {}
+    )
 
     # Extract user queries per turn
     user_script: List[Dict[str, Any]] = []
-    for turn_label, turn_msgs in raw_convs.items():
-        user_msg = next((m for m in turn_msgs if m.get("role") == "user"), None)
-        asst_msg = next((m for m in turn_msgs if m.get("role") == "assistant"), None)
-        if user_msg:
+    if data.get("unified_turns"):
+        for ut in data["unified_turns"]:
+            asst_exp = ut.get("expected") or {}
+            asst_act = ut.get("actual") or {}
+            turn_label = f"turn {ut.get('turn', len(user_script) + 1)}"
             user_script.append({
                 "turn_label": turn_label,
-                "user_content": user_msg.get("content", ""),
-                "expected_content": asst_msg.get("expected_content") if asst_msg else None,
-                "expected_tools_order": asst_msg.get("expected_tools_call_order") if asst_msg else [],
-                "expected_tools": (
-                    [
-                        {
-                            "name": t.get("name"),
-                            "expected_args": t.get("expected_args"),
-                            "expected_response": t.get("expected_response"),
-                        }
-                        for t in asst_msg.get("actual_tools_called", [])
-                        if t.get("expected_args") or t.get("expected_response")
-                    ]
-                    if asst_msg and asst_msg.get("actual_tools_called")
-                    else []
-                ),
+                "user_content": ut.get("user_query", ""),
+                "expected_content": asst_exp.get("expected_content"),
+                "expected_tools_order": asst_exp.get("expected_tools_order") or [],
+                "expected_tools": [
+                    {
+                        "name": t.get("name"),
+                        "expected_args": t.get("expected_args"),
+                        "expected_response": t.get("expected_response"),
+                    }
+                    for t in asst_exp.get("expected_tools", [])
+                    if t.get("expected_args") or t.get("expected_response")
+                ],
             })
+    else:
+        for turn_label, turn_msgs in raw_convs.items():
+            user_msg = next((m for m in turn_msgs if m.get("role") == "user"), None)
+            asst_msg = next((m for m in turn_msgs if m.get("role") == "assistant"), None)
+            if user_msg:
+                user_script.append({
+                    "turn_label": turn_label,
+                    "user_content": user_msg.get("content", ""),
+                    "expected_content": asst_msg.get("expected_content") if asst_msg else None,
+                    "expected_tools_order": asst_msg.get("expected_tools_call_order") if asst_msg else [],
+                    "expected_tools": (
+                        [
+                            {
+                                "name": t.get("name"),
+                                "expected_args": t.get("expected_args"),
+                                "expected_response": t.get("expected_response"),
+                            }
+                            for t in asst_msg.get("actual_tools_called", [])
+                            if t.get("expected_args") or t.get("expected_response")
+                        ]
+                        if asst_msg and asst_msg.get("actual_tools_called")
+                        else []
+                    ),
+                })
 
     if dry_run:
         print(f"\n   [REPLAY DRY-RUN] Case: {case_id}")
@@ -187,16 +218,39 @@ def replay_testcase(
         )
         replayed_turns.append(asst_turn_obj)
 
-        # 3. Evaluate this turn
-        asst_meta = getattr(asst_turn_obj, "metadata", {}) or {}
-        actual_tools = asst_meta.get("actual_tools_called") or []
-        actual_order = asst_meta.get("actual_tools_call_order") or []
+    # Fetch authoritative LangSmith execution trace for replay evaluation
+    compact_ls_export = None
+    if not dry_run and enrich_with_langsmith and new_thread_id:
+        from scripts.golden_bridge import _fetch_langsmith_compact_trace
+        compact_ls_export = _fetch_langsmith_compact_trace(new_thread_id)
+
+    ls_turns = (compact_ls_export.get("turns") if compact_ls_export else []) or []
+
+    # 3. Evaluate replay turns against LangSmith trace
+    for idx, s_turn in enumerate(user_script, start=1):
+        user_query = s_turn["user_content"]
+        asst_turn_idx = (idx * 2) - 1
+        asst_turn_obj = replayed_turns[asst_turn_idx] if asst_turn_idx < len(replayed_turns) else Turn(role="assistant", content="")
+        ls_t = ls_turns[idx - 1] if idx - 1 < len(ls_turns) else None
+
+        actual_tools = [
+            {
+                "name": tc.get("tool_name"),
+                "args": tc.get("inputs", {}),
+                "response": tc.get("output"),
+            }
+            for tc in (ls_t.get("tools_call", []) if ls_t else [])
+        ]
+        actual_order = [tc.get("tool_name") for tc in (ls_t.get("tools_call", []) if ls_t else []) if tc.get("tool_name")]
 
         # Tool correctness check
         tool_passed, tool_errors = evaluate_tool_correctness(
             actual_tools=actual_tools,
             expected_tools=s_turn.get("expected_tools") or [],
         )
+        if not ls_t and not dry_run:
+            tool_errors.append(f"No LangSmith execution trace found for thread {new_thread_id} turn {idx}")
+            tool_passed = False
 
         # Tool order check
         exp_order = s_turn.get("expected_tools_order") or []
@@ -215,7 +269,7 @@ def replay_testcase(
             "expected_tools_order": exp_order,
             "tool_correctness_passed": tool_passed and order_passed,
             "tool_errors": tool_errors,
-            "metrics": asst_meta.get("metrics"),
+            "metrics": ls_t.get("tokens") if ls_t else None,
         }
         turn_evaluations.append(turn_eval)
 
@@ -240,14 +294,16 @@ def replay_testcase(
         metadata=new_metadata,
     )
 
-    # Export replayed run non-destructively to deterministic_reply
-    datasets_root = test_case_file.parents[3]  # root datasets/
+    # Export replayed run strictly into test/run/<date_time>/ (truth set in datasets/ remains untouched)
     export_result = export_simulated_testcase(
         test_case=live_test_case,
-        datasets_dir=datasets_root,
+        datasets_dir=None,
+        runs_dir=runs_dir,
+        run_timestamp=run_timestamp,
         thread_id=new_thread_id,
         target_mode="deterministic_reply",
         overwrite=False,
+        enrich_with_langsmith=enrich_with_langsmith,
     )
     print(f"   💾 Exported Replay Run: {Path(export_result['json_path']).name}")
 
@@ -265,11 +321,14 @@ def replay_testcase(
 
 def run_replay_suite(
     datasets_dir: Optional[Union[str, Path]] = None,
+    runs_dir: Optional[Union[str, Path]] = None,
+    run_timestamp: Optional[str] = None,
     category_filter: Optional[str] = None,
     scenario_filter: Optional[str] = None,
     variation_filter: Optional[str] = None,
     api_url: str = DEFAULT_CHAT_API_URL,
     dry_run: bool = False,
+    enrich_with_langsmith: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Crawls deterministic_reply folders and runs replay evaluations.
@@ -307,7 +366,14 @@ def run_replay_suite(
 
     results = []
     for f in matching_files:
-        res = replay_testcase(test_case_file=f, api_url=api_url, dry_run=dry_run)
+        res = replay_testcase(
+            test_case_file=f,
+            api_url=api_url,
+            dry_run=dry_run,
+            runs_dir=runs_dir,
+            run_timestamp=run_timestamp,
+            enrich_with_langsmith=enrich_with_langsmith,
+        )
         results.append(res)
 
     return results
@@ -356,8 +422,35 @@ def main():
         default=None,
         help="Path to datasets root (default: 'conversational_golden/datasets').",
     )
+    parser.add_argument(
+        "--run-timestamp",
+        type=str,
+        default=None,
+        help="Run timestamp folder name under test/run/ (default: current UTC timestamp 'YYYY-MM-DD_HH-MM-SS').",
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=str,
+        default=None,
+        help="Custom root directory for run exports (default: 'test/run').",
+    )
+    parser.add_argument(
+        "--enrich-langsmith",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enrich test cases with real-time LangSmith execution traces (default: True).",
+    )
+    parser.add_argument(
+        "--retention-limit",
+        type=int,
+        default=20,
+        help="Maximum number of historical execution runs to retain in test/run/ (default: 20, 0 to disable).",
+    )
 
     args = parser.parse_args()
+
+    runs_root = Path(args.run_dir) if args.run_dir else get_default_runs_dir()
+    run_timestamp = args.run_timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 
     print("=" * 70)
     print("🔁 DeepEval Deterministic Conversational Replay Evaluator")
@@ -366,17 +459,23 @@ def main():
     print(f"🎯 Filter Category:  {args.category or 'All'}")
     print(f"🎯 Filter Scenario:  {args.scenario or 'All'}")
     print(f"🎯 Filter Variation: {args.variation or 'All'}")
+    print(f"📁 Runs Directory:   {(runs_root / run_timestamp).resolve()}")
+    print(f"🔍 LangSmith Traces: {args.enrich_langsmith}")
+    print(f"🧹 Retention Limit:  {args.retention_limit}")
     print(f"⚙️  Dry-Run Mode:     {args.dry_run}")
     print("=" * 70)
 
     start_time = time.time()
     results = run_replay_suite(
         datasets_dir=args.datasets_dir,
+        runs_dir=runs_root,
+        run_timestamp=run_timestamp,
         category_filter=args.category,
         scenario_filter=args.scenario,
         variation_filter=args.variation,
         api_url=args.backend_url,
         dry_run=args.dry_run,
+        enrich_with_langsmith=args.enrich_langsmith,
     )
     duration = round(time.time() - start_time, 2)
 
@@ -385,6 +484,8 @@ def main():
         print("\n" + "=" * 70)
         print(f"🏁 Replay Evaluation Complete in {duration}s")
         print(f"📊 Passed: {passed_count}/{len(results)} | Failed: {len(results) - passed_count}")
+        if args.retention_limit and args.retention_limit > 0:
+            prune_old_runs(runs_root=runs_root, keep_last=args.retention_limit)
         print("=" * 70)
 
 

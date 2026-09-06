@@ -13,6 +13,7 @@ from scripts.golden_bridge import (
     load_all_conversational_goldens,
     load_dataset_for_evaluation,
     load_scenario_bundle,
+    promote_run_to_deterministic,
 )
 
 
@@ -174,11 +175,11 @@ def test_export_and_load_simulated_dataset():
             },
         )
 
-        # Export single test case
-        result = export_simulated_testcase(mock_test_case, datasets_dir=datasets_dir)
+        # Export single test case as deterministic ground truth for datasets_dir
+        result = export_simulated_testcase(mock_test_case, datasets_dir=datasets_dir, target_mode="deterministic_reply")
         exported_path = Path(result["json_path"])
         assert exported_path.exists()
-        assert "manage_my_booking/query_pnr/frustrated_traveler/dynamic_simulation/FRUST_01_INVALID_FORMAT.json" in str(exported_path)
+        assert "manage_my_booking/query_pnr/frustrated_traveler/deterministic_reply/FRUST_01_INVALID_FORMAT.json" in str(exported_path)
 
         # Verify JSON payload
         with open(exported_path, "r", encoding="utf-8") as f:
@@ -187,30 +188,42 @@ def test_export_and_load_simulated_dataset():
         assert data["thread_id"] == "test_thread_12345"
         assert "User wants to check flight status" in data["scenario_description"]
         assert data["metadata"]["golden_link"]["scenario_id"] == "SCENARIO_PNR_01"
-        assert "turn 1" in data["conversations"]
-        turn_1 = data["conversations"]["turn 1"]
-        assert len(turn_1) == 2
-        assert turn_1[0]["role"] == "user"
-        assert turn_1[1]["role"] == "assistant"
-        assert turn_1[1]["expected_content"] == "Inform user that PNR AB123 is invalid and explain 6-character rule."
-        assert turn_1[1]["expected_tools_call_order"] == ["check_booking_status"]
-        assert turn_1[1]["actual_tools_call_order"] == ["check_booking_status"]
-        assert turn_1[1]["actual_tools_called"][0]["name"] == "check_booking_status"
-        assert turn_1[1]["actual_tools_called"][0]["args"] == {"pnr": "AB123"}
-        assert turn_1[1]["actual_tools_called"][0]["expected_args"] == {"pnr": "AB123"}
-        assert turn_1[1]["actual_tools_called"][0]["response"] == {"error": "Invalid format"}
-        assert turn_1[1]["actual_tools_called"][0]["expected_response"] == {"error": "Invalid format"}
-        assert turn_1[1]["metrics"]["ttft_ms"] == 350.0
-        assert turn_1[1]["run_id"] == "mock_run_999"
-        assert data["total_turns"] == 1
-        assert data["performance_summary"]["total_tokens"] == 480
-        assert data["performance_summary"]["avg_ttft_ms"] == 350.0
+
+        # Check that duplicate/redundant fields are NOT present
+        assert "conversations" not in data
+        assert "expected_trajectory" not in data  # Outer duplicate removed
+        assert "performance_summary" not in data  # Outer duplicate removed
+        assert "total_turns" not in data  # Outer duplicate removed
+        assert "expected_metrics" not in data.get("expected", {})  # Only in metadata
+
+        # Check clean locations
+        assert "expected_trajectory" in data["expected"]
+        assert "expected_metrics" in data["metadata"]
+        assert data["actual"]["total_turns"] == 1
+        assert data["actual"]["performance_summary"]["total_tokens"] == 480
+        assert data["actual"]["performance_summary"]["avg_ttft_ms"] == 350.0
+
+        assert len(data["unified_turns"]) == 1
+        turn_1 = data["unified_turns"][0]
+        assert turn_1["turn"] == 1
+        assert turn_1["run_id"] == "mock_run_999"
+        assert turn_1["user_query"] == "Check my flight status for PNR AB123!"
+        assert turn_1["expected"]["expected_content"] == "Inform user that PNR AB123 is invalid and explain 6-character rule."
+        assert turn_1["expected"]["expected_tools_order"] == ["check_booking_status"]
+        assert turn_1["actual"]["tools_order"] == ["check_booking_status"]
+        assert turn_1["actual"]["tools_called"][0]["name"] == "check_booking_status"
+        assert turn_1["actual"]["tools_called"][0]["args"] == {"pnr": "AB123"}
+        assert turn_1["actual"]["tools_called"][0]["expected_args"] == {"pnr": "AB123"}
+        assert turn_1["actual"]["tools_called"][0]["response"] == {"error": "Invalid format"}
+        assert turn_1["actual"]["tools_called"][0]["expected_response"] == {"error": "Invalid format"}
+        assert turn_1["actual"]["ttft_ms"] == 350.0
 
         # Export scenario summary
         summary = export_scenario_summary(
             scenario_rel_dir="manage_my_booking/query_pnr",
             test_cases=[mock_test_case],
             datasets_dir=datasets_dir,
+            target_mode="deterministic_reply",
         )
         assert Path(summary["dataset_json"]).exists()
         assert Path(summary["report_md"]).exists()
@@ -264,14 +277,66 @@ def test_non_destructive_export_safeguard():
 
         # First export creates base TEST_SAFEGUARD_01.json
         res1 = export_simulated_testcase(mock_tc, datasets_dir=datasets_dir, target_mode="dynamic", overwrite=False)
+        res1 = export_simulated_testcase(mock_tc, datasets_dir=datasets_dir, target_mode="deterministic", overwrite=False)
         path1 = Path(res1["json_path"])
         assert path1.name == "TEST_SAFEGUARD_01.json"
         assert path1.exists()
 
         # Second export without overwrite creates timestamped version to safeguard original
         res2 = export_simulated_testcase(mock_tc, datasets_dir=datasets_dir, target_mode="dynamic", overwrite=False)
+        res2 = export_simulated_testcase(mock_tc, datasets_dir=datasets_dir, target_mode="deterministic", overwrite=False)
         path2 = Path(res2["json_path"])
         assert path2.exists()
         assert path2.name != "TEST_SAFEGUARD_01.json"
         assert path2.name.startswith("TEST_SAFEGUARD_01_")
         assert path1.exists()  # Original file is preserved untouched
+
+
+def test_dynamic_simulation_does_not_pollute_datasets():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        datasets_dir = Path(tmp_dir) / "datasets"
+        runs_dir = Path(tmp_dir) / "runs"
+        run_ts = "2026-09-06_18-00-00"
+
+        # Create mock case
+        g_link = {
+            "rule_category": "manage_my_booking",
+            "scenario_name": "query_pnr",
+            "persona_slug": "frustrated_traveler",
+            "variation_id": "FRUST_DYNAMIC",
+        }
+        mock_tc = ConversationalTestCase(
+            turns=[Turn(role="user", content="Hello"), Turn(role="assistant", content="Hi")],
+            scenario="Test scenario",
+            expected_outcome="Test outcome",
+            name="FRUST_DYNAMIC",
+            metadata={"golden_link": g_link, "thread_id": "mock_th"},
+        )
+
+        # Export dynamic simulation with both runs_dir and datasets_dir provided
+        res = export_simulated_testcase(
+            mock_tc,
+            datasets_dir=datasets_dir,
+            runs_dir=runs_dir,
+            run_timestamp=run_ts,
+            target_mode="dynamic_simulation",
+        )
+        run_json = Path(res["json_path"])
+        assert run_json.exists()
+        assert "runs" in str(run_json)
+        assert "dynamic_simulation" in str(run_json)
+
+        # datasets_dir must NOT contain dynamic_simulation
+        dynamic_in_datasets = list(datasets_dir.glob("**/dynamic_simulation*"))
+        assert len(dynamic_in_datasets) == 0
+
+        # Now test promote_run_to_deterministic
+        promoted_path = promote_run_to_deterministic(run_json, datasets_dir=datasets_dir)
+        assert promoted_path.exists()
+        assert "deterministic_reply/FRUST_DYNAMIC.json" in str(promoted_path)
+
+        with open(promoted_path, "r", encoding="utf-8") as f:
+            p_data = json.load(f)
+        assert p_data["target_mode"] == "deterministic_reply"
+        assert "turn 1" in p_data["conversations"]
+        assert p_data["conversations"]["turn 1"][0]["content"] == "Hello"

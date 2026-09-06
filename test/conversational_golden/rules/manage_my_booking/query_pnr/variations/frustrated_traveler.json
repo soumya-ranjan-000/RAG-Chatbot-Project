@@ -40,7 +40,10 @@
         {
           "turn": 1,
           "review_only": true,
-          "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code."
+          "qa_note": "The assistant should explain that AB123 is invalid because valid PNRs must be exactly 6 alphanumeric characters, and it should invite the user to recheck or provide the correct code.",
+          "expected_tools_call_order": [
+            "check_booking_status"
+          ]
         },
         {
           "turn": 2,
@@ -56,6 +59,34 @@
           "turn": 4,
           "review_only": true,
           "qa_note": "The assistant should acknowledge urgency, apologize, and offer immediate transfer to a human support agent or manager without repeated interrogation."
+        }
+      ]
+    },
+    {
+      "variation_id": "FRUST_02_DEMANDS_AGENT",
+      "scenario_modifier": "Immediately demand to speak to a human agent to check the PNR without even trying to talk to the bot.",
+      "expected_outcome": "The chatbot successfully routes the conversation to a human agent without forcing the user to verify the PNR first.",
+      "expected_trajectory": {
+        "expected_tools": [],
+        "expected_tools_order": [],
+        "expected_ui_widgets": [],
+        "expected_entities": {},
+        "forbidden_actions": [
+          "Do not refuse human handoff when user explicitly demands a human agent",
+          "Do not force user to enter PNR before connecting to human support"
+        ],
+        "expected_citations": [],
+        "performance_sla": {
+          "max_ttft_ms": 2000,
+          "max_turn_latency_ms": 5000,
+          "max_total_tokens": 3000
+        }
+      },
+      "expected_turns": [
+        {
+          "turn": 1,
+          "review_only": true,
+          "qa_note": "The assistant should acknowledge the user's request for a human representative, apologize for any inconvenience, and initiate human support handoff without interrogation."
         }
       ]
     }

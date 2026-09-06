@@ -6,58 +6,92 @@ This directory contains the **Conversational Golden Rules**, **Persona Variation
 
 ## 🏗️ System Architecture & Workflow
 
-The framework bridges declarative rule definitions into dynamic multi-turn user simulations and exports structured evaluation datasets with complete traceability.
+The framework bridges declarative rule definitions into dynamic multi-turn user simulations, extracts real-time execution traces from LangSmith, and evaluates conversations using DeepEval and deterministic contract checks.
 
 ```mermaid
-graph TD
-    A["conversational_golden/rules/<br/>(Scenarios & Variations)"] -->|1. Scans & Parses| B["golden_bridge.py<br/>(Golden Bridge)"]
-    B -->|2. Compiles Goldens + Personas| C["ConversationalGolden Objects"]
-    C -->|3. Feeds Goldens| D["conv_simulator.py<br/>(DeepEval Simulator)"]
-    D -->|4. Multi-turn Streaming SSE| E["Backend Chatbot API (/chat)"]
-    E -->|5. Assistant Turns| D
-    D -->|6. Simulated ConversationalTestCase| B
-    B -->|7. Exports with Golden Links| F["conversational_golden/datasets/<br/>(Exact Mirror of Rules)"]
-    F -->|8. Loaded by Evaluator| G["DeepEval Evaluation Pipeline"]
+flowchart TD
+    subgraph Step1["Step 1: Rule & Persona Definition"]
+        R1["scenario_config.json"]
+        R2["variations/<persona>.json"]
+        R3["personas.json"]
+        R4["expected_metrics.json"]
+    end
+
+    subgraph Step2["Step 2: Roleplay Execution"]
+        SIM["conv_simulator.py (Dynamic) /<br/>conv_replay_evaluator.py (Replay)"]
+        API["Backend Chatbot API (/chat)"]
+    end
+
+    subgraph Step3["Step 3: Pre-Evaluation & Unified Data Prep"]
+        LS["LangSmith Observability Traces<br/>(Tools, Args, Responses, Tokens, Latency)"]
+        BRIDGE["golden_bridge.py"]
+        RUN["test/run/<date_time>/**/<variation_id>.json<br/>(Unified Expected + Actual Data)"]
+    end
+
+    subgraph Step4["Step 4: Multi-Turn Evaluation & Scorecard"]
+        EVAL["conv_evaluator.py"]
+        DET["Deterministic Contract Checks<br/>(Tools, Order, UI Widgets, SLA, Constraints)"]
+        LLM["DeepEval LLM-as-a-Judge<br/>(RoleAdherence, ConversationCompleteness)"]
+        REPORT["test/run/<date_time>/evaluation_report.json"]
+    end
+
+    Step1 --> SIM
+    SIM <--> API
+    API -. trace .-> LS
+    SIM --> BRIDGE
+    LS --> BRIDGE
+    BRIDGE --> RUN
+    RUN --> EVAL
+    EVAL --> DET
+    EVAL --> LLM
+    DET & LLM --> REPORT
 ```
 
 ---
 
 ## 📁 Directory Structure & 1:1 Parity
 
-The directory structure maintains strict 1:1 structural parity between rule definitions (`rules/`) and generated conversation datasets (`datasets/`):
+The framework maintains strict 1:1 directory hierarchy parity across rules, runtime runs, and baseline datasets:
 
 ```
-conversational_golden/
-├── README.md                                         # This documentation
-├── rules/                                            # Declarative rules & variations (Input)
-│   ├── booking/
-│   │   ├── book_ticket/
-│   │   └── search_flights/
-│   └── manage_my_booking/
-│       ├── cancel_flight/
-│       └── query_pnr/
-│           ├── scenario_config.json                  # Common scenario config (base scenario, PNR rules)
-│           ├── shared_context.txt                    # Freeform airline domain policies
-│           ├── expected_metrics.json                 # Target metrics & threshold definitions
-│           └── variations/                           # Persona variation files
-│               ├── frustrated_traveler.json          # Impatient/angry persona variations
-│               └── normal_direct.json                # Direct/polite persona variations
+test/
+├── conversational_golden/
+│   ├── README.md                                     # This documentation
+│   ├── personas.json                                 # Central catalog of 12 reusable traveler personas
+│   ├── rules/                                        # Declarative rules & variations (Input)
+│   │   ├── booking/
+│   │   │   ├── book_ticket/
+│   │   │   └── search_flights/
+│   │   └── manage_my_booking/
+│   │       ├── cancel_flight/
+│   │       └── query_pnr/
+│   │           ├── scenario_config.json              # Common scenario config (base scenario, PNR rules)
+│   │           ├── shared_context.txt                # Freeform airline domain policies
+│   │           ├── expected_metrics.json             # Target metrics & threshold definitions
+│   │           └── variations/                       # Persona variation files
+│   │               ├── frustrated_traveler.json      # Impatient/angry persona variations
+│   │               └── normal_direct.json            # Direct/polite persona variations
+│   │
+│   └── datasets/                                     # 🎯 Curated Ground Truth Test Cases (Git Versioned)
+│       └── <domain_category>/
+│           └── <scenario_name>/
+│               └── <persona_slug>/
+│                   └── deterministic_reply/          # 🔒 Turn-by-turn human-editable test cases for regression
+│                       └── <variation_id>.json
 │
-└── datasets/                                         # Generated multi-turn simulations (Output)
-    └── manage_my_booking/
-        └── query_pnr/
-            ├── frustrated_traveler/
-            │   ├── deterministic_reply/              # 🔒 Deterministic QA Testcases & Replay Runs
-            │   │   ├── FRUST_01_INVALID_FORMAT.json
-            │   │   └── FRUST_02_DEMANDS_AGENT.json
-            │   └── dynamic_simulation/                # 🎲 DeepEval LLM Free-form Generated Conversations
-            │       ├── FRUST_01_INVALID_FORMAT.json
-            │       └── FRUST_02_DEMANDS_AGENT.json
-            ├── normal_direct/
-            │   ├── deterministic_reply/
-            │   └── dynamic_simulation/
-            ├── dataset.json                          # Consolidated scenario dataset
-            └── simulation_report.md                  # Human-readable markdown transcript
+└── run/                                              # ⏱️ Execution Run Artifacts (Timestamped & Immutable)
+    └── <YYYY-MM-DD_HH-MM-SS>/                        # Specific execution run
+        ├── manage_my_booking/
+        │   └── query_pnr/
+        │       ├── frustrated_traveler/
+        │       │   ├── deterministic_reply/          # Execution outputs from deterministic replay
+        │       │   │   └── FRUST_01_INVALID_FORMAT.json
+        │       │   └── dynamic_simulation/           # Execution outputs from dynamic LLM simulation
+        │       │       └── FRUST_01_INVALID_FORMAT.json
+        │       └── normal_direct/
+        │           ├── deterministic_reply/
+        │           └── dynamic_simulation/
+        └── evaluation_report.json                    # Evaluation scorecard & metrics report
 ```
 
 ---
@@ -247,63 +281,127 @@ Each generated JSON file in `datasets/` contains complete conversation turns and
 
 ---
 
-## 🚀 Usage Guide
+## 🚀 Step-by-Step Execution Lifecycle
 
-All commands should be executed from the `test/` directory using the virtual environment:
+Follow these steps from the `test/` directory using the virtual environment:
 
-### 1. Previewing & Validating Rules (`--dry-run`)
+### Step 1: Scaffold / Author Rules & Persona Variations
 
-Validate that all scenario bundles and persona variations parse cleanly without making LLM or API calls:
+1. **Pick or Add Personas**: Select traveler personas from [`test/conversational_golden/personas.json`](file:///home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/test/conversational_golden/personas.json) (12 available profiles including `frustrated_traveler`, `business_traveler`, `elderly_traveler`, etc.).
+2. **Auto-Generate with Skill**: Provide QA acceptance criteria to Antigravity and prompt:
+   > _"Generate rule variations for one-way flight booking for a budget backpacker and business traveler based on acceptance criteria."_
+   > The skill [`.agents/skills/generate-rule-variations/SKILL.md`](file:///home/so-ra-gh/Dev/my_projects/RAG-Chatbot-Project/.agents/skills/generate-rule-variations/SKILL.md) automatically inspects `booking_agent.py` and `tools.py` and scaffolds the 4-file scenario bundle (`scenario_config.json`, `shared_context.txt`, `expected_metrics.json`, `variations/<persona>.json`).
+
+### Step 2: Validate Rules & Schemas (`--dry-run`)
+
+Validate that scenario bundles, context chunks, and persona variations parse cleanly without making LLM or API calls:
 
 ```bash
-# Preview all discovered goldens and variations
+# Preview all discovered goldens and variations across categories
 .venv/bin/python scripts/conv_simulator.py --dry-run
 
-# Preview a specific scenario
+# Preview a specific scenario or variation
 .venv/bin/python scripts/conv_simulator.py --scenario query_pnr --dry-run
-
-# Preview a specific variation
 .venv/bin/python scripts/conv_simulator.py --variation FRUST_01_INVALID_FORMAT --dry-run
 ```
 
-### 2. Generating Datasets with `conv_simulator.py`
+### Step 3: Execute Live Roleplay (Simulation or Replay)
 
-Start your chatbot backend (e.g., `http://localhost:8000/chat`), then run:
+Ensure your chatbot backend is running (e.g. `uvicorn main:app --port 8000`), then run:
+
+#### Option A: Dynamic LLM Simulation (`conv_simulator.py`)
+
+DeepEval acts as the traveler persona interacting conversationally with the chatbot:
 
 ```bash
-# A) Dynamic Simulation Mode (Default -> saves to dynamic_simulation/)
-.venv/bin/python scripts/conv_simulator.py --target dynamic
+# Simulates dynamic conversation and exports directly to test/run/<date_time>/...
+.venv/bin/python scripts/conv_simulator.py --scenario query_pnr
 
-# B) Deterministic QA Baseline Creation (Saves to deterministic_reply/)
-.venv/bin/python scripts/conv_simulator.py --target deterministic
-
-# Filter by category/scenario and specify custom turn limit
-.venv/bin/python scripts/conv_simulator.py --category manage_my_booking --scenario query_pnr --max-turns 4
-
-# Non-destructive file safeguard is enabled by default (creates timestamped file if testcase exists)
-# Pass --overwrite if you explicitly wish to overwrite:
-.venv/bin/python scripts/conv_simulator.py --target deterministic --overwrite
+# Create deterministic baseline testcases (for QA review before replay)
+.venv/bin/python scripts/conv_simulator.py --scenario query_pnr --target deterministic
 ```
 
-### 3. Running Deterministic Replay Evaluation (`conv_replay_evaluator.py`)
+#### Option B: Deterministic Conversation Replay (`conv_replay_evaluator.py`)
 
-Replays fixed user queries turn-by-turn from `deterministic_reply/` against the live chatbot backend and evaluates tool parameters, responses, order, and expected content:
+Replays pre-scripted user queries turn-by-turn against the live backend:
 
 ```bash
-# Preview deterministic test scripts
+# Preview deterministic replay testcases
 .venv/bin/python scripts/conv_replay_evaluator.py --dry-run
 
-# Run full replay evaluation against live backend
+# Replay against live backend and record traces into test/run/<date_time>/...
 .venv/bin/python scripts/conv_replay_evaluator.py --category manage_my_booking
-
-# Run replay evaluation for a specific variation
-.venv/bin/python scripts/conv_replay_evaluator.py -v FRUST_01_INVALID_FORMAT
 ```
 
-### 4. Running Automated Test Suite
+### Step 4: Automated Pre-Evaluation & LangSmith Trace Enrichment
 
-To verify the bridge, golden compiler, and dataset exporter:
+During Step 3, the runtime automatically performs **Pre-Evaluation / Unified Data Prep**:
+
+1. Captures the active `thread_id` from the roleplay session.
+2. Once the conversation finishes, queries LangSmith in a single batch to extract complete server execution traces (exact tools called, inputs, responses, token counts, TTFT, and latency).
+3. Merges **Expected Golden Criteria** + **Actual LangSmith Traces** into a single unified JSON file stored under:
+   ```
+   test/run/<date_time>/<rule_category>/<scenario_name>/<persona_slug>/<target_mode>/<variation_id>.json
+   ```
+   _(Maintains exact 1:1 directory hierarchy parity with `datasets/`)._
+
+### Step 5: Run DeepEval Multi-Turn Evaluation (`conv_evaluator.py`)
+
+Loads the unified test cases from `test/run/<date_time>/` (or defaults to the latest run) and executes evaluation:
 
 ```bash
-.venv/bin/pytest test_golden_bridge.py -v
+# Run deterministic contract checks only (no LLM judge required)
+.venv/bin/python scripts/conv_evaluator.py --skip-llm
+
+# Evaluate the latest run with DeepEval LLM-as-a-judge metrics
+.venv/bin/python scripts/conv_evaluator.py --run latest
+
+# Evaluate a specific historical timestamp run
+.venv/bin/python scripts/conv_evaluator.py --run 2026-09-06_15-30-00
+
+# Override LLM judge model (e.g. gemini-2.5-flash or gpt-4o-mini)
+.venv/bin/python scripts/conv_evaluator.py --run latest --model gemini-2.5-flash
+
+# Filter evaluation by scenario or variation
+.venv/bin/python scripts/conv_evaluator.py --scenario query_pnr -v FRUST_01_INVALID_FORMAT
 ```
+
+**Evaluated Criteria**:
+
+- 🛠️ **Tool Correctness**: Validates expected tools were called with matching parameters.
+- 🔄 **Tool Call Order**: Ensures chronological sequence compliance.
+- 📱 **UI Widget Schemas**: Asserts emitted markdown code blocks contain valid JSON (`is_valid_json: true`).
+- ⚡ **Performance SLA**: Verifies TTFT, latency, and token budgets against scenario thresholds.
+- 🚫 **Negative Constraints**: Verifies forbidden actions were avoided.
+- 🤖 **DeepEval LLM Metrics**: Scores `RoleAdherenceMetric` and `ConversationCompletenessMetric`.
+
+The evaluator outputs a terminal scorecard and saves the consolidated report:
+`test/run/<date_time>/evaluation_report.json`
+
+### Step 6: Automated Regression Test Verification
+
+Run the automated pytest test suite to verify bridge loaders, schema serialization, runs directory hierarchy, and evaluation engines:
+
+```bash
+.venv/bin/pytest test_golden_bridge.py test_conv_evaluator.py -v
+```
+
+---
+
+## 🛡️ Test Data Management Best Practices
+
+### 1. Ground Truth (`datasets/`) vs. Execution Runs (`test/run/`)
+
+| Directory                         | Role                            | Description                                                                                                          | Git Tracking                                                 |
+| --------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `conversational_golden/rules/`    | **Scenario Rules Bank**         | Authoring rules, personas, variation specs, SLA constraints.                                                         | **Tracked in Git**                                           |
+| `conversational_golden/datasets/` | **Ground Truth Specifications** | Clean conversation transcripts for QA to inspect/edit without runtime trace noise. Replays read from here.           | **Tracked in Git**                                           |
+| `test/run/<date_time>/`           | **What Exactly Happened**       | Unified test cases combining Expected criteria + Actual LangSmith traces (tools called, arguments, latency, tokens). | **Ignored in Git** (`.gitignore`), keeps `test/run/.gitkeep` |
+| `test/exports/`                   | **Raw Trace Archive**           | Raw LangSmith run JSON dumps.                                                                                        | **Ignored in Git**                                           |
+
+### 2. Automated Run Retention Policy
+
+To prevent disk bloat over long test cycles, runners provide automated pruning of old timestamped folders under `test/run/`:
+
+- `--retention-limit <N>` (used in `conv_simulator.py` and `conv_replay_evaluator.py`, default `20`): Retains the $N$ newest run folders and deletes older ones. Pass `0` to disable.
+- `--prune-runs <N>` (used in `conv_evaluator.py`): Optionally prunes historical execution folders during or after evaluation runs.
