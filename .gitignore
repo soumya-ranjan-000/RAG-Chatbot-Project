@@ -103,3 +103,14 @@ temp/
 # Windows specific
 $RECYCLE.BIN/
 ehthumbs.db
+
+# Conversational Evaluation Runs & Trace Exports (Ephemeral Execution Artifacts)
+test/run/*/
+test/exports/
+test/testdata/
+!test/run/.gitkeep
+
+# Ensure Ground Truth Test Datasets and Rules are Always Tracked
+!test/conversational_golden/rules/
+!test/conversational_golden/datasets/
+
