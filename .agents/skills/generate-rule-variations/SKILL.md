@@ -241,12 +241,23 @@ For each chosen persona from `personas.json`, create `variations/<persona_slug>.
       "expected_turns": [
         {
           "turn": 1,
+          "user_query": "<Realistic first-person query from persona, e.g. 'I want to book a flight from BLR to DXB on tomorrow.'>",
+          "user_query_alternatives": ["<optional paraphrase 1>", "<optional paraphrase 2>"],
           "review_only": true,
           "qa_note": "<What the assistant should do/say in Turn 1>",
           "expected_tools_call_order": ["<optional tool for this turn>"]
+          "expected_tools_call_order": ["<optional tool for this turn>"],
+          "expected_tools": [
+            {
+              "name": "<tool_name>",
+              "expected_args": { "<key>": "<val>" },
+              "expected_response": { "<key>": "<val>" }
+            }
+          ]
         },
         {
           "turn": 2,
+          "user_query": "<Follow-up utterance for Turn 2>",
           "review_only": true,
           "qa_note": "<What the assistant should do/say in Turn 2>"
         }
@@ -264,15 +275,18 @@ For each chosen persona from `personas.json`, create `variations/<persona_slug>.
    - For booking: Turn 1 (Search flights) -> Turn 2 (Fare & Passenger Review) -> Turn 3 (Book flight & Payment Block).
    - For check-in: Turn 1 (Checkin declaration) -> Turn 2 (Seat selection if unassigned) -> Turn 3 (Final confirmation & check_in_passenger tool).
 4. **Safety & Forbidden Actions**: Always define 2+ `forbidden_actions` to safeguard against hallucinations or unauthorized tool executions.
+5. **Scripted User Queries**: Always include natural, first-person `user_query` strings matching the persona's tone. This enables immediate deterministic replay and promotion into truth sets.
 
 ---
 
 ## Step 6: Automated Validation Checklist
 
 After writing the files, execute the bridge dry-run to verify JSON syntax and schema compliance:
+After writing the files, execute the dynamic simulator dry-run to verify JSON syntax and schema compliance:
 
 ```bash
 .venv/bin/python test/scripts/conv_simulator.py --scenario <scenario_path> --dry-run
+.venv/bin/python test/scripts/dynamic_simulator.py --scenario <scenario_path> --dry-run
 ```
 
 **Verification Criteria**:
@@ -281,3 +295,8 @@ After writing the files, execute the bridge dry-run to verify JSON syntax and sc
 - Goldens count matches expected number of variations.
 - All tool names match backend tools.
 - Run unit tests if needed: `.venv/bin/pytest test/test_golden_bridge.py -v`.
+- Once a dynamic run produces a high-quality conversation, QA can promote it to the official truth set:
+  ```bash
+  .venv/bin/python test/scripts/dynamic_to_deterministic.py <path_to_run.json>
+  ```
+- Run unit tests: `.venv/bin/pytest test/ -v`.
